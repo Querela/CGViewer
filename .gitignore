@@ -1,4 +1,21 @@
+## .gitignore ##
+
+## CGViewer-Project ##
+
+# will be dynamically generated
 Makefile
+
+# the binary
+CGViewer
+
+# temp files while compiling
+moc/
+obj/
+
+*.sh
+
+
+## PREDEFINED ##
 
 # Compiled Object files
 *.slo

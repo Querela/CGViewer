@@ -334,7 +334,7 @@ void Raytracer::genImage()
             cout<<"\r----"<<(float)count/(float)image->height()*100.0<<"----";
         }
         
-        #pragma omp master
+        #pragma omp critical
         {
             if (!(superSamplingRate <= 1.0) || omp_get_num_threads()==1)
             {

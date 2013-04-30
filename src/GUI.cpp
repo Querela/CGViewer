@@ -1,5 +1,5 @@
 #include "Raytracer.h"
-#include "gui.h"
+#include "GUI.h"
 #include "CGMath.h"
 
 GUI::GUI()
