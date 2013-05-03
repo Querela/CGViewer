@@ -20,8 +20,8 @@ GUI::GUI()
     options->addAction( "Translate Object", this, SLOT(translate()));
     options->addAction( "Rotate Object", this, SLOT(rotate()));
     options->addAction( "Delete Object", this, SLOT(deleteObject()));
-     //enableShaders = options->addAction( "Enable Shader", this, SLOT(setShaders()), Qt::CTRL+Qt::Key_M );
-     enableShaders = false;
+    //enableShaders = options->addAction( "Enable Shader", this, SLOT(setShaders()), Qt::CTRL+Qt::Key_M );
+    enableShaders = NULL; // = false;
      
     options->addAction( "Enable/Disable Backface Culling", this, SLOT(setCulling()), Qt::CTRL+Qt::Key_B );
 

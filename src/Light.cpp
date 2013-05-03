@@ -151,7 +151,7 @@ const float* Light::getSpecular() const
 
 const float* Light::getAttenuation () const
 {
-      float att[] = {constAtt,linAtt,quadAtt};
+    float att[] = {constAtt, linAtt, quadAtt}; // static ?
     return att;
 }
 
