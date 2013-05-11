@@ -163,6 +163,9 @@ Raytracer::Raytracer( QString path )
             t.texCoords[1]=tex_coords[TexCoordsNr2];
             t.texCoords[2]=tex_coords[TexCoordsNr3];
         }
+        // computing planeNormals
+        t.planeNormal = crossProduct(t.vertices[1] - t.vertices[0],
+                                      t.vertices[2] - t.vertices[0]);
         triangles.push_back(t);
     }
     cout<<"Got "<<triangles.size()<<" Triangles\n";
@@ -187,7 +190,7 @@ void Raytracer::init()
     //create DisplayList
     displayList = glGenLists(1);
     glNewList(displayList, GL_COMPILE);
-    for (int i=0; i<triangles.size(); ++i)
+    for (unsigned int i=0; i<triangles.size(); ++i)
     {
         float r = (float)(i % 255);
         float g = (float)((i/255) % 255);
@@ -321,8 +324,10 @@ void Raytracer::genImage()
                 c = raytrace(camera, dir, MAX_DEPTH);
                                                 
             }
-              else
+            else
+            {
                 c = backgroundColor;
+            }
 
             image->setPixel(i,image->height()-(j+1), QRgb(c.rgb()));
 
@@ -333,16 +338,17 @@ void Raytracer::genImage()
             ++count;
             cout<<"\r----"<<(float)count/(float)image->height()*100.0<<"----";
         }
-        
+       
+        // get the thread number (0 == master thread) 
+        const int threadID = omp_get_thread_num();
         #pragma omp critical
         {
-            if (!(superSamplingRate <= 1.0) || omp_get_num_threads()==1)
+            if ((!(superSamplingRate <= 1.0) || omp_get_num_threads()==1) && (threadID == 0))
             {
                 label->setPixmap(QPixmap::fromImage(image->scaled ( image->width()/superSamplingRate, image->height()/superSamplingRate, Qt::IgnoreAspectRatio, Qt::FastTransformation )));
                 label->repaint();
             }
         }
-
     }
     delete zValues;
     cout<<endl;
@@ -357,7 +363,90 @@ void Raytracer::genImage()
 
 QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 {
-    return backgroundColor;
+    if (depth <= 0)
+    {
+        return backgroundColor;
+    }
+
+    QColor color = backgroundColor;
+
+    // compute all intersections
+    int v = -1;
+    float lastT = -1;
+    for (unsigned int j = 0; j < triangles.size(); j ++)
+    {
+        Triangle tri= triangles[j];
+        float bn = scalarProduct(dir, tri.planeNormal);
+
+        // check if parallel
+        if ((bn < 0.00001) && (-0.00001 < bn))
+        {
+            continue;
+        }
+
+        // get t =  ((p - e) * n) / (b * n)
+        float t = scalarProduct((tri.vertices[0] - start), tri.planeNormal) / bn;
+        if (t < 0)
+        {
+            continue;
+        }
+
+        // ray(t) = e + (b * t)
+        Vector p = start + (dir * t);
+
+        //float alpha0, alpha1, alpha2, area;
+        Vector area0v, area1v, area2v;
+
+        // area(p0, p1, p2) = 0.5 * || (p1 - p0) x (p2 - p0) ||
+        //area = crossProduct(tri.vertices[1] - tri.vertices[0],
+        //                    tri.vertices[2] - tri.vertices[0]).norm() * 0.5;
+
+        // check if point in triangle
+        area0v = crossProduct(tri.vertices[1] - p,
+                              tri.vertices[2] - p);
+        if (scalarProduct(area0v, tri.planeNormal) < 0) continue;
+        area1v = crossProduct(tri.vertices[2] - p,
+                              tri.vertices[0] - p);
+        if (scalarProduct(area1v, tri.planeNormal) < 0) continue;
+        area2v = crossProduct(tri.vertices[0] - p,
+                              tri.vertices[1] - p);
+        if (scalarProduct(area2v, tri.planeNormal) < 0) continue;
+
+        //alpha0 = (area0v.norm() * 0.5) / area;
+        //alpha1 = (area1v.norm() * 0.5) / area;
+        //alpha2 = (area2v.norm() * 0.5) / area;
+        //float alpha = alpha0 + alpha1 + alpha2;
+        //if (alpha < 0.99999 || alpha > 1.00001) continue;
+
+        //Vector p = alpha0 * tri.vertices[0] +
+        //           alpha1 * tri.vertices[1] +
+        //           alpha2 * tri.vertices[2];
+
+        if ((lastT > t) || (lastT == -1))
+        {
+            lastT = t;
+            v = j;
+        }
+    }
+
+    if (v == -1)
+    {
+        color = backgroundColor;
+    }
+    else
+    {
+        // compute color
+        float col = 255 * ((v+1) / (float) triangles.size());
+        color.setRgb(col, col, col);
+
+        for (unsigned int i = 0; i < lights.size(); i ++)
+        {
+            // compute ray to light source
+            // ...
+        }
+    }
+
+    return color;
 }
 
 
