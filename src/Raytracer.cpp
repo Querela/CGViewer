@@ -308,14 +308,19 @@ void Raytracer::generateVoxels()
 
     cout << "Time (bounding box): " << t.restart() << " msec" << endl;
     // DEBUG: Output bounding box dimensions/coordinates
-    //cout << "BoundingBox X[" << minX << "/" << maxX << "], Y[" << minY << "/"
-    //     << maxY << "], Z[" << minZ << "/" << maxZ << "]" << endl;
+    cout << "BoundingBox X[" << minX << "/" << maxX << "], Y[" << minY << "/"
+         << maxY << "], Z[" << minZ << "/" << maxZ << "]" << endl;
 
     // ------------------------------------------------------------------------
 
     // Set origin and dimension of voxels
     voxels.origin = Vector(minX, minY, minZ);
     voxels.size = Vector((maxX - minX), (maxY - minY), (maxZ - minZ));
+
+    // DEBUG: Output voxelGroup
+    cout << "VoxelGroup origin: (" << minX << "/" << minY << "/" << minZ << ")" << endl;
+    cout << "VoxelGroup size  : (" << voxels.size[0] << "/" << voxels.size[1] << "/"
+         << voxels.size[2] << ")" << endl;
 
     // TEST: compute grid resolution
     float cubeRoot = powf(VOXEL_LAMBDA * triangles.size() /
@@ -474,7 +479,7 @@ void Raytracer::genImage()
     w->show();
     
 
-#pragma omp parallel for schedule(dynamic, 1)
+//#pragma omp parallel for schedule(dynamic, 1)
   for (int j=0; j<image->height(); j+=1)
     {    
         for (int i=0; i<image->width(); i+=1)
@@ -487,7 +492,7 @@ void Raytracer::genImage()
                 gluUnProject( (float)i, (float)j, zValues[j*image->width()+i], mvMatrix, projMatrix, viewPort, &dX, &dY, &dZ );
                 Vector intersection(dX, dY, dZ);
                 Vector dir = intersection - camera;
-                dir.normalize();
+                //dir.normalize();
                 c = raytrace(camera, dir, MAX_DEPTH);
                                                 
             }
@@ -537,86 +542,247 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 
     QColor color = backgroundColor;
 
-    // TODO: Check if ray intersects voxel box
+    // Get direction of ray
+    //float t = scalarProduct(dir, voxels.voxelSize);
+    // directions of ray
+    //float rayDir[3];
+    //rayDir[0] = (dir[0] < 0) ? -1 : 1;
+    //rayDir[1] = (dir[1] < 0) ? -1 : 1;
+    //rayDir[2] = (dir[2] < 0) ? -1 : 1;
 
-    
-    
+    float minT = INFINITY, maxT = -INFINITY;
+    float tempT;
 
-    // compute all intersections
-    int v = -1;
-    float lastT = -1;
-    for (unsigned int j = 0; j < triangles.size(); j ++)
+    Vector n100 = Vector(1, 0, 0), n010 = Vector(0, 1, 0), n001 = Vector(0, 0, 1);
+    float bn;
+
+    // ------------------------------------------------------------------------
+    // get nearest and farthest t for ray
+
+    // check y-z plane
+    // check x intersection and not parallel
+    /*bn = scalarProduct(dir, n100);
+    if (bn != 0)
     {
-        Triangle tri= triangles[j];
-        float bn = scalarProduct(dir, tri.planeNormal);
-
-        // check if parallel
-        if ((bn < 0.00001) && (-0.00001 < bn))
+        tempT = scalarProduct(((voxels.origin + Vector(voxels.size[0], 0, 0)) - start), n100) / bn;
+        if ((tempT > 0) && (tempT < minT))
         {
-            continue;
+            minT = tempT;
         }
-
-        // get t =  ((p - e) * n) / (b * n)
-        float t = scalarProduct((tri.vertices[0] - start), tri.planeNormal) / bn;
-        if (t < 0)
+        if (tempT > maxT)
         {
-            continue;
+            maxT = tempT;
         }
-
-        // ray(t) = e + (b * t)
-        Vector p = start + (dir * t);
-
-        //float alpha0, alpha1, alpha2, area;
-        Vector area0v, area1v, area2v;
-
-        // area(p0, p1, p2) = 0.5 * || (p1 - p0) x (p2 - p0) ||
-        //area = crossProduct(tri.vertices[1] - tri.vertices[0],
-        //                    tri.vertices[2] - tri.vertices[0]).norm() * 0.5;
-
-        // check if point in triangle
-        area0v = crossProduct(tri.vertices[1] - p,
-                              tri.vertices[2] - p);
-        if (scalarProduct(area0v, tri.planeNormal) < 0) continue;
-        area1v = crossProduct(tri.vertices[2] - p,
-                              tri.vertices[0] - p);
-        if (scalarProduct(area1v, tri.planeNormal) < 0) continue;
-        area2v = crossProduct(tri.vertices[0] - p,
-                              tri.vertices[1] - p);
-        if (scalarProduct(area2v, tri.planeNormal) < 0) continue;
-
-        //alpha0 = (area0v.norm() * 0.5) / area;
-        //alpha1 = (area1v.norm() * 0.5) / area;
-        //alpha2 = (area2v.norm() * 0.5) / area;
-        //float alpha = alpha0 + alpha1 + alpha2;
-        //if (alpha < 0.99999 || alpha > 1.00001) continue;
-
-        //Vector p = alpha0 * tri.vertices[0] +
-        //           alpha1 * tri.vertices[1] +
-        //           alpha2 * tri.vertices[2];
-
-        if ((lastT > t) || (lastT == -1))
+        bn = scalarProduct(dir, n100 * -1);
+        tempT = scalarProduct((voxels.origin - start), n100 * -1) / bn;
+        if ((tempT > 0 ) && (tempT < minT))
         {
-            lastT = t;
-            v = j;
+            minT = tempT;
+        }
+        if (tempT > maxT)
+        {
+            maxT = tempT;
         }
     }
 
-    if (v == -1)
+    // x-z plane
+    bn = scalarProduct(dir, n010);
+    if (bn != 0)
     {
-        color = backgroundColor;
-    }
-    else
-    {
-        // compute color
-        float col = 255 * ((v+1) / (float) triangles.size());
-        color.setRgb(col, col, col);
-
-        for (unsigned int i = 0; i < lights.size(); i ++)
+        tempT = scalarProduct(((voxels.origin + Vector(0, voxels.size[1], 0)) - start), n010) / bn;
+        if ((tempT > 0) && (tempT < minT))
         {
-            // compute ray to light source
-            // ...
+            minT = tempT;
+        }
+        if (tempT > maxT)
+        {
+            maxT = tempT;
+        }
+        bn = scalarProduct(dir, n010 * -1);
+        tempT = scalarProduct((voxels.origin - start), n010 * -1) / bn;
+        if ((tempT > 0) && (tempT < minT))
+        {
+            minT = tempT;
+        }
+        if (tempT > maxT)
+        {
+            maxT = tempT;
+        }
+    }*/
+
+    // x-y plane
+    bn = scalarProduct(dir, n001);
+    if (bn != 0)
+    {
+        tempT = scalarProduct(((voxels.origin + Vector(0, 0, voxels.size[2])) - start), n001) / bn;
+        if ((tempT > 0) && (tempT < minT))
+        {
+            //Vector vt = start + dir * tempT;
+            //Vector vt2 = voxels.origin + voxels.size;
+            //if ((vt[0] > voxels.origin[0]) && (vt[1] > voxels.origin[1]) && (vt[0] < vt2[0]) && (vt[1] < vt2[1]))
+            minT = tempT;
+        }
+        if (tempT > maxT)
+        {
+            maxT = tempT;
+        }
+        bn = scalarProduct(dir, n001 * -1);
+        tempT = scalarProduct((voxels.origin - start), n001 * -1) / bn;
+        if ((tempT > 0) && (tempT < minT))
+        {
+            //Vector vt = start + dir * tempT;
+            //Vector vt2 = voxels.origin + voxels.size;
+            //if ((vt[0] > voxels.origin[0]) && (vt[1] > voxels.origin[1]) && (vt[0] < vt2[0]) && (vt[1] < vt2[1]))
+            minT = tempT;
+        }
+        if (tempT > maxT)
+        {
+            maxT = tempT;
         }
     }
+
+//    cout << "bn=" << bn << ", minT=" << minT << endl;
+
+    // ------------------------------------------------------------------------
+ 
+    int voxel[3], lastVoxel[3], step[3];
+    Vector deltaT, nextCrossingT;
+
+    Vector rayI = start + dir * minT;
+//    cout << "Inter: (" << rayI[0] << "/" << rayI[1] << "/" << rayI[2] << ")" << endl;
+
+    // need voxel coordinates and step
+    for (unsigned int i = 0; i < 3; i ++)
+    {
+        float rayOrigVoxel = ((start[0] + (dir[0] * minT)) - voxels.origin[i]);
+        voxel[i] = std::max(0, std::min((int) (rayOrigVoxel / voxels.voxelSize[i]),
+                                        (int) voxels.resolution[i] - 1));
+        if (dir[i] < 0)
+        {
+            deltaT[i] = - voxels.voxelSize[i] * 1.f / dir[i]; // ?
+            nextCrossingT[i] = minT + (voxel[i] * voxels.voxelSize[i] - rayOrigVoxel) * 1.f / dir[i]; // ?
+
+            lastVoxel[i] = -1;
+            step[i] = -1;
+        }
+        else
+        {
+            deltaT[i] = voxels.voxelSize[i] * 1.f / dir[i];
+            nextCrossingT[i] = minT + ((voxel[i] + 1) * voxels.voxelSize[i] -
+                                rayOrigVoxel) * 1.f / dir[i];
+
+            lastVoxel[i] = voxels.resolution[i];
+            step[i] = 1;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+
+    // raytrace voxels
+
+    float lastT = -INFINITY;
+    int intersect = -1;
+    const static unsigned int jumpMapAxis[8] = {2, 1, 2, 1, 2, 2, 0, 0};
+
+    while(true)
+    {
+        unsigned int v = voxel[2] * voxels.resolution[0] * voxels.resolution[1] +
+                         voxel[1] * voxels.resolution[0] + voxel[0];
+        Voxel vox = voxels.voxels[v];
+//        cout << "In Voxel " << v << ": (" << vox.vertices.size() << ")" << endl;
+
+        // compute triangle intersections
+        for (unsigned int i = 0; i < vox.vertices.size(); i ++)
+        {
+            Triangle tri = triangles[vox.vertices[i]];
+            bn = scalarProduct(dir, tri.planeNormal);
+
+            // check if parallel
+            if (bn == 0)
+            {
+                continue;
+            }
+
+            // get t =  ((p - e) * n) / (b * n)
+            float t = scalarProduct((tri.vertices[0] - start), tri.planeNormal) / bn;
+            if (t < 0)
+            {
+                continue;
+            }
+
+            // ray(t) = e + (b * t)
+            Vector p = start + (dir * t);
+            //cout << "Intersection at (" << p[0] << "/" << p[1] << "/" << p[2] << ")" << endl;
+
+            //float alpha0, alpha1, alpha2, area;
+            Vector area0v, area1v, area2v;
+
+            // area(p0, p1, p2) = 0.5 * || (p1 - p0) x (p2 - p0) ||
+            //area = crossProduct(tri.vertices[1] - tri.vertices[0],
+            //                    tri.vertices[2] - tri.vertices[0]).norm() * 0.5;
+
+            // check if point in triangle
+            area0v = crossProduct(tri.vertices[1] - p,
+                                  tri.vertices[2] - p);
+            if (scalarProduct(area0v, tri.planeNormal) < 0) continue;
+            area1v = crossProduct(tri.vertices[2] - p,
+                                  tri.vertices[0] - p);
+            if (scalarProduct(area1v, tri.planeNormal) < 0) continue;
+            area2v = crossProduct(tri.vertices[0] - p,
+                                  tri.vertices[1] - p);
+            if (scalarProduct(area2v, tri.planeNormal) < 0) continue;
+
+            //alpha0 = (area0v.norm() * 0.5) / area;
+            //alpha1 = (area1v.norm() * 0.5) / area;
+            //alpha2 = (area2v.norm() * 0.5) / area;
+            //float alpha = alpha0 + alpha1 + alpha2;
+            //if (alpha < 0.99999 || alpha > 1.00001) continue;
+
+            //Vector p = alpha0 * tri.vertices[0] +
+            //           alpha1 * tri.vertices[1] +
+            //           alpha2 * tri.vertices[2];
+
+            if (lastT > t)
+            {
+                lastT = t;
+                intersect = i;
+            }
+        }
+
+        if (intersect != -1)
+        {
+            // compute color
+            float col = 255 * ((v+1) / (float) triangles.size());
+            color.setRgb(col, col, col);
+
+            for (unsigned int i = 0; i < lights.size(); i ++)
+            {
+                // compute ray to light source
+                // ...
+            }
+
+            // no other voxel to test
+            break;
+        }
+
+        unsigned int k = ((nextCrossingT[0] < nextCrossingT[1]) << 2) +
+                         ((nextCrossingT[1] < nextCrossingT[2]) << 1) +
+                         ((nextCrossingT[2] < nextCrossingT[0]));
+        unsigned int axis = jumpMapAxis[k];
+
+        if (maxT < nextCrossingT[axis]) break;
+        voxel[axis] += step[axis];
+        if (voxel[axis] == lastVoxel[axis]) break;
+        nextCrossingT[axis] += deltaT[axis];
+    }
+
+    // no voxel with no triangle for intersection ...
+    if (intersect == -1)
+    {
+        color.setRgb(255, 0, 0);
+    }
+
+    // ------------------------------------------------------------------------
 
     return color;
 }
