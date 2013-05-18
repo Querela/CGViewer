@@ -277,12 +277,169 @@ void Raytracer::paintGL()
     glCallList(displayList);
 }
 
+
+void Raytracer::generateVoxels()
+{
+    QTime t;
+    t.start();
+
+    // get some initial values
+    float minX = triangles[0].vertices[0][0];
+    float minY = triangles[0].vertices[0][1];
+    float minZ = triangles[0].vertices[0][2];
+    float maxX = triangles[0].vertices[0][0];
+    float maxY = triangles[0].vertices[0][1];
+    float maxZ = triangles[0].vertices[0][2];
+
+    // get min and max values -> bounding box
+    for (unsigned int i = 0; i < triangles.size(); i ++)
+    {
+        Triangle t = triangles[i];
+        for (unsigned int j = 0; j < 3; j ++)
+        {
+           if (minX > t.vertices[j][0]) minX = t.vertices[j][0];
+           if (maxX < t.vertices[j][0]) maxX = t.vertices[j][0];
+           if (minY > t.vertices[j][1]) minY = t.vertices[j][1];
+           if (maxY < t.vertices[j][1]) maxY = t.vertices[j][1];
+           if (minZ > t.vertices[j][2]) minZ = t.vertices[j][2];
+           if (maxZ < t.vertices[j][2]) maxZ = t.vertices[j][2];
+        }
+    }
+
+    cout << "Time (bounding box): " << t.restart() << " msec" << endl;
+    cout << "BoundingBox X[" << minX << "/" << maxX << "], Y[" << minY << "/"
+         << maxY << "], Z[" << minZ << "/" << maxZ << "]" << endl;
+
+    // ------------------------------------------------------------------------
+
+    // Set origin and dimension of voxels
+    voxels.origin = Vector(minX, minY, minZ);
+    voxels.size = Vector((maxX - minX), (maxY - minY), (maxZ - minZ));
+
+    // TEST: compute grid resolution
+    float cubeRoot = powf(VOXEL_LAMBDA * triangles.size() /
+                     ((maxX - minX) * (maxY - minY) * (maxZ - minZ)), 1 / 3.f);
+    int voxelNumX = std::max(1, std::min((int) ((maxX - minX) * cubeRoot), 128));
+    int voxelNumY = std::max(1, std::min((int) ((maxY - minY) * cubeRoot), 128));
+    int voxelNumZ = std::max(1, std::min((int) ((maxZ - minZ) * cubeRoot), 128));
+
+    // DEBUG: Output voxel grid size
+    cout << "Voxel grid size (lambda = " << VOXEL_LAMBDA
+                            << "): X = " << voxelNumX
+                             << ", Y = " << voxelNumY
+                             << ", Z = " << voxelNumZ << endl;
+
+    voxels.voxelSize = Vector((maxX - minX) / VOXEL_NUM_PER_DIM,
+                              (maxY - minY) / VOXEL_NUM_PER_DIM,
+                              (maxZ - minZ) / VOXEL_NUM_PER_DIM);
+    // DEBUG: Output single voxel size
+    cout << "Voxel-Vector: (" << voxels.voxelSize[0] << "/"
+                              << voxels.voxelSize[1] << "/"
+                              << voxels.voxelSize[2] << ")" << endl;
+
+    // generate voxels (assign triangles later)
+    for (int x = 0; x < VOXEL_NUM_PER_DIM; x ++)
+    {
+        for (int y = 0; y < VOXEL_NUM_PER_DIM; y ++)
+        {
+            for (int z = 0; z < VOXEL_NUM_PER_DIM; z ++)
+            {
+                Voxel v;
+                v.pos = Vector(minX + x * voxels.voxelSize[0],
+                               minY + y * voxels.voxelSize[1],
+                               minZ + z * voxels.voxelSize[2]);
+                voxels.voxels.push_back(v);
+                // DEBUG: Output generated voxels (nr) ?
+                //cout << (z * VOXEL_NUM_PER_DIM * VOXEL_NUM_PER_DIM + y * VOXEL_NUM_PER_DIM + x)
+                //     << ": (" << v.pos[0] << "/" << v.pos[1] << "/" << v.pos[2] << ")" << endl;
+            }
+        }
+    }
+
+    // insert triangles into voxels
+    for (unsigned int i = 0; i < triangles.size(); i ++)
+    {
+        Triangle t = triangles[i];
+
+        // get bounding box of triangle
+        float tMinX = maxX;
+        float tMaxX = minX;
+        float tMinY = maxY;
+        float tMaxY = minY;
+        float tMinZ = maxZ;
+        float tMaxZ = minZ;
+
+        for (unsigned int j = 0; j < 3; j ++)
+        {
+            if (t.vertices[j][0] < tMinX) tMinX = t.vertices[j][0];
+            if (t.vertices[j][0] > tMaxX) tMaxX = t.vertices[j][0];
+            if (t.vertices[j][1] < tMinY) tMinY = t.vertices[j][1];
+            if (t.vertices[j][1] > tMaxY) tMaxY = t.vertices[j][1];
+            if (t.vertices[j][2] < tMinZ) tMinZ = t.vertices[j][2];
+            if (t.vertices[j][2] > tMaxZ) tMaxZ = t.vertices[j][2];
+        }
+
+        // get voxel coordinates
+        unsigned int vMin = 0;
+        unsigned int vMax = VOXEL_NUM_PER_DIM - 1;
+
+        unsigned int vMinX = std::max(vMin, std::min((unsigned int)
+                                      ((tMinX - minX) / VOXEL_NUM_PER_DIM), vMax));
+        unsigned int vMaxX = std::max(vMin, std::min((unsigned int)
+                                      ((tMaxX - minX) / VOXEL_NUM_PER_DIM), vMax));
+        unsigned int vMinY = std::max(vMin, std::min((unsigned int)
+                                      ((tMinY - minY) / VOXEL_NUM_PER_DIM), vMax));
+        unsigned int vMaxY = std::max(vMin, std::min((unsigned int)
+                                      ((tMaxY - minY) / VOXEL_NUM_PER_DIM), vMax));
+        unsigned int vMinZ = std::max(vMin, std::min((unsigned int)
+                                      ((tMinZ - minZ) / VOXEL_NUM_PER_DIM), vMax));
+        unsigned int vMaxZ = std::max(vMin, std::min((unsigned int)
+                                      ((tMaxZ - minZ) / VOXEL_NUM_PER_DIM), vMax));
+
+        // DEBUG: Output min/max voxel coordinates
+        //cout << "Voxel coordinates: X[" << vMinX << "-" << vMaxX << "], Y["
+        //                                << vMinY << "-" << vMaxY << "], Z["
+        //                                << vMinZ << "-" << vMaxZ << "]" << endl;
+
+        // insert vertices into voxels
+        // take all voxels which intersect with the bounding box of the triangle
+        // TODO: optimize
+        for (unsigned int z = vMinZ; z <= vMaxZ; z ++)
+        {
+            for (unsigned int y = vMinY; y <= vMaxY; y ++)
+            {
+                for (unsigned int x = vMinX; x <= vMaxX; x ++)
+                {
+                    voxels.voxels[z * VOXEL_NUM_PER_DIM * VOXEL_NUM_PER_DIM +
+                                  y * VOXEL_NUM_PER_DIM + x].vertices.push_back(i);
+                }
+            }
+        }
+    }
+
+    // DEBUG: Output voxels with vertices
+    //for (unsigned int i = 0; i < voxels.voxels.size(); i ++)
+    //{
+    //    cout << "Voxel " << i << ":";
+    //    for (unsigned int j = 0; j < voxels.voxels[i].vertices.size(); j ++)
+    //    {
+    //        cout << " " << voxels.voxels[i].vertices[j];
+    //    }
+    //    cout << endl;
+    //}
+
+    cout << "Time (triangles -> voxels): " << t.elapsed()  << " msec" << endl;
+}
+
+
 void Raytracer::genImage()
 {
     QTime t;
     t.start();
     
     init();
+
+    generateVoxels();
 
     int count = 0;
 
@@ -321,6 +478,7 @@ void Raytracer::genImage()
                 gluUnProject( (float)i, (float)j, zValues[j*image->width()+i], mvMatrix, projMatrix, viewPort, &dX, &dY, &dZ );
                 Vector intersection(dX, dY, dZ);
                 Vector dir = intersection - camera;
+                dir.normalize();
                 c = raytrace(camera, dir, MAX_DEPTH);
                                                 
             }
@@ -369,6 +527,11 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     }
 
     QColor color = backgroundColor;
+
+    // TODO: Check if ray intersects voxel box
+
+    
+    
 
     // compute all intersections
     int v = -1;

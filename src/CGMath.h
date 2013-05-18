@@ -117,6 +117,22 @@ inline Vector crossProduct( Vector v1, Vector v2 )
 };
 
 
+// acceleration structure
+struct Voxel
+{
+    std::vector<unsigned int> vertices;
+    Vector pos;
+};
+
+struct VoxelGroup
+{
+    std::vector<Voxel> voxels;
+    Vector origin;
+    Vector size;
+    Vector voxelSize;
+};
+
+
 //since this programm works only with triangles every vector in the Face-struct has dimension 3
 struct Face
 {

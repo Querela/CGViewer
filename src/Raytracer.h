@@ -33,6 +33,9 @@ class Raytracer : public QGLWidget
             QImage finalImage;
             std::vector<Triangle> triangles;
 
+            VoxelGroup voxels;
+            void generateVoxels();
+
             //Scene setup
             Vector camera, center, upVector;
             float focalLength;
@@ -50,5 +53,8 @@ class Raytracer : public QGLWidget
             GLuint fboId;
             
 };
+
+const static int VOXEL_NUM_PER_DIM = 3;
+const static int VOXEL_LAMBDA = 3;
 
 #endif
