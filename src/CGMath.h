@@ -126,9 +126,15 @@ struct Voxel
 
 struct VoxelGroup
 {
+    // list of all voxels (1D)
     std::vector<Voxel> voxels;
+    // point of origin, base for computation
     Vector origin;
+    // opposite edge, diagonal
     Vector size;
+    // split size in each dimension, needed for indizes ...
+    unsigned int resolution[3];
+    // size of a single voxel, diagnal
     Vector voxelSize;
 };
 

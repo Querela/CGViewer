@@ -307,8 +307,9 @@ void Raytracer::generateVoxels()
     }
 
     cout << "Time (bounding box): " << t.restart() << " msec" << endl;
-    cout << "BoundingBox X[" << minX << "/" << maxX << "], Y[" << minY << "/"
-         << maxY << "], Z[" << minZ << "/" << maxZ << "]" << endl;
+    // DEBUG: Output bounding box dimensions/coordinates
+    //cout << "BoundingBox X[" << minX << "/" << maxX << "], Y[" << minY << "/"
+    //     << maxY << "], Z[" << minZ << "/" << maxZ << "]" << endl;
 
     // ------------------------------------------------------------------------
 
@@ -319,9 +320,9 @@ void Raytracer::generateVoxels()
     // TEST: compute grid resolution
     float cubeRoot = powf(VOXEL_LAMBDA * triangles.size() /
                      ((maxX - minX) * (maxY - minY) * (maxZ - minZ)), 1 / 3.f);
-    int voxelNumX = std::max(1, std::min((int) ((maxX - minX) * cubeRoot), 128));
-    int voxelNumY = std::max(1, std::min((int) ((maxY - minY) * cubeRoot), 128));
-    int voxelNumZ = std::max(1, std::min((int) ((maxZ - minZ) * cubeRoot), 128));
+    unsigned int voxelNumX = std::max(1, std::min((int) ((maxX - minX) * cubeRoot), 128));
+    unsigned int voxelNumY = std::max(1, std::min((int) ((maxY - minY) * cubeRoot), 128));
+    unsigned int voxelNumZ = std::max(1, std::min((int) ((maxZ - minZ) * cubeRoot), 128));
 
     // DEBUG: Output voxel grid size
     cout << "Voxel grid size (lambda = " << VOXEL_LAMBDA
@@ -329,20 +330,30 @@ void Raytracer::generateVoxels()
                              << ", Y = " << voxelNumY
                              << ", Z = " << voxelNumZ << endl;
 
-    voxels.voxelSize = Vector((maxX - minX) / VOXEL_NUM_PER_DIM,
-                              (maxY - minY) / VOXEL_NUM_PER_DIM,
-                              (maxZ - minZ) / VOXEL_NUM_PER_DIM);
+    // Set to const. value
+    voxelNumX = VOXEL_NUM_PER_DIM;
+    voxelNumY = VOXEL_NUM_PER_DIM;
+    voxelNumZ = VOXEL_NUM_PER_DIM;
+
+    // store for later use
+    voxels.resolution[0] = voxelNumX;
+    voxels.resolution[1] = voxelNumY;
+    voxels.resolution[2] = voxelNumZ;
+
+    voxels.voxelSize = Vector((maxX - minX) / voxelNumX,
+                              (maxY - minY) / voxelNumY,
+                              (maxZ - minZ) / voxelNumZ);
     // DEBUG: Output single voxel size
-    cout << "Voxel-Vector: (" << voxels.voxelSize[0] << "/"
-                              << voxels.voxelSize[1] << "/"
-                              << voxels.voxelSize[2] << ")" << endl;
+    //cout << "Voxel-Vector: (" << voxels.voxelSize[0] << "/"
+    //                          << voxels.voxelSize[1] << "/"
+    //                          << voxels.voxelSize[2] << ")" << endl;
 
     // generate voxels (assign triangles later)
-    for (int x = 0; x < VOXEL_NUM_PER_DIM; x ++)
+    for (unsigned int x = 0; x < voxelNumX; x ++)
     {
-        for (int y = 0; y < VOXEL_NUM_PER_DIM; y ++)
+        for (unsigned int y = 0; y < voxelNumY; y ++)
         {
-            for (int z = 0; z < VOXEL_NUM_PER_DIM; z ++)
+            for (unsigned int z = 0; z < voxelNumZ; z ++)
             {
                 Voxel v;
                 v.pos = Vector(minX + x * voxels.voxelSize[0],
@@ -350,7 +361,7 @@ void Raytracer::generateVoxels()
                                minZ + z * voxels.voxelSize[2]);
                 voxels.voxels.push_back(v);
                 // DEBUG: Output generated voxels (nr) ?
-                //cout << (z * VOXEL_NUM_PER_DIM * VOXEL_NUM_PER_DIM + y * VOXEL_NUM_PER_DIM + x)
+                //cout << (z * voxelNumX * voxelNumY + y * voxelNumX + x)
                 //     << ": (" << v.pos[0] << "/" << v.pos[1] << "/" << v.pos[2] << ")" << endl;
             }
         }
@@ -380,21 +391,18 @@ void Raytracer::generateVoxels()
         }
 
         // get voxel coordinates
-        unsigned int vMin = 0;
-        unsigned int vMax = VOXEL_NUM_PER_DIM - 1;
-
-        unsigned int vMinX = std::max(vMin, std::min((unsigned int)
-                                      ((tMinX - minX) / VOXEL_NUM_PER_DIM), vMax));
-        unsigned int vMaxX = std::max(vMin, std::min((unsigned int)
-                                      ((tMaxX - minX) / VOXEL_NUM_PER_DIM), vMax));
-        unsigned int vMinY = std::max(vMin, std::min((unsigned int)
-                                      ((tMinY - minY) / VOXEL_NUM_PER_DIM), vMax));
-        unsigned int vMaxY = std::max(vMin, std::min((unsigned int)
-                                      ((tMaxY - minY) / VOXEL_NUM_PER_DIM), vMax));
-        unsigned int vMinZ = std::max(vMin, std::min((unsigned int)
-                                      ((tMinZ - minZ) / VOXEL_NUM_PER_DIM), vMax));
-        unsigned int vMaxZ = std::max(vMin, std::min((unsigned int)
-                                      ((tMaxZ - minZ) / VOXEL_NUM_PER_DIM), vMax));
+        unsigned int vMinX = std::max((unsigned int) 0, std::min((unsigned int)
+                                      ((tMinX - minX) / voxelNumX), voxelNumX - 1));
+        unsigned int vMaxX = std::max((unsigned int) 0, std::min((unsigned int)
+                                      ((tMaxX - minX) / voxelNumX), voxelNumX - 1));
+        unsigned int vMinY = std::max((unsigned int) 0, std::min((unsigned int)
+                                      ((tMinY - minY) / voxelNumY), voxelNumY - 1));
+        unsigned int vMaxY = std::max((unsigned int) 0, std::min((unsigned int)
+                                      ((tMaxY - minY) / voxelNumY), voxelNumY - 1));
+        unsigned int vMinZ = std::max((unsigned int) 0, std::min((unsigned int)
+                                      ((tMinZ - minZ) / voxelNumZ), voxelNumZ - 1));
+        unsigned int vMaxZ = std::max((unsigned int) 0, std::min((unsigned int)
+                                      ((tMaxZ - minZ) / voxelNumZ), voxelNumZ - 1));
 
         // DEBUG: Output min/max voxel coordinates
         //cout << "Voxel coordinates: X[" << vMinX << "-" << vMaxX << "], Y["
@@ -410,8 +418,8 @@ void Raytracer::generateVoxels()
             {
                 for (unsigned int x = vMinX; x <= vMaxX; x ++)
                 {
-                    voxels.voxels[z * VOXEL_NUM_PER_DIM * VOXEL_NUM_PER_DIM +
-                                  y * VOXEL_NUM_PER_DIM + x].vertices.push_back(i);
+                    voxels.voxels[z * voxelNumX * voxelNumY +
+                                  y * voxelNumX + x].vertices.push_back(i);
                 }
             }
         }
@@ -428,7 +436,8 @@ void Raytracer::generateVoxels()
     //    cout << endl;
     //}
 
-    cout << "Time (triangles -> voxels): " << t.elapsed()  << " msec" << endl;
+    cout << "Time (" << triangles.size() << " triangles -> "
+         << voxels.voxels.size() << " voxels): " << t.elapsed()  << " msec" << endl;
 }
 
 
