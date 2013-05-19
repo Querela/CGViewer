@@ -291,7 +291,7 @@ void Raytracer::generateVoxels()
     float maxY = triangles[0].vertices[0][1];
     float maxZ = triangles[0].vertices[0][2];
 
-    // get min and max values -> bounding box
+    // get min and max values -> bounding box of entire scene
     for (unsigned int i = 0; i < triangles.size(); i ++)
     {
         Triangle t = triangles[i];
@@ -425,6 +425,12 @@ void Raytracer::generateVoxels()
                 {
                     voxels.voxels[z * voxelNumX * voxelNumY +
                                   y * voxelNumX + x].vertices.push_back(i);
+//                    Voxel v = voxels.voxels[z * voxelNumX * voxelNumY +
+//                                            y * voxelNumX + x];
+//                    Triangle t = triangles[i];
+//                    float vminx = v.pos[0], vminy = v.pos[1], vminz = v.pos[2];
+//                    float vmaxx = vminx + voxels.voxelSize[0], vmaxy = vminy +
+//                    voxels.voxelSize[1], vmaxz = vminz + voxels.voxelSize[2];
                 }
             }
         }
@@ -438,7 +444,10 @@ void Raytracer::generateVoxels()
     // DEBUG: Output voxels with vertices
     //for (unsigned int i = 0; i < voxels.voxels.size(); i ++)
     //{
-    //    cout << "Voxel " << i << ":";
+    //    cout << "Voxel " << i << " (" << voxels.voxels[i].vertices.size()
+    //         << " Tri) (" << voxels.voxels[i].pos[0] << "/"
+    //                      << voxels.voxels[i].pos[1] << "/"
+    //                      << voxels.voxels[i].pos[2] << "):";
     //    for (unsigned int j = 0; j < voxels.voxels[i].vertices.size(); j ++)
     //    {
     //        cout << " " << voxels.voxels[i].vertices[j];
@@ -484,7 +493,7 @@ void Raytracer::genImage()
     w->show();
     
 
-//#pragma omp parallel for schedule(dynamic, 1)
+#pragma omp parallel for schedule(dynamic, 1)
   for (int j=0; j<image->height(); j+=1)
     {    
         for (int i=0; i<image->width(); i+=1)
@@ -513,7 +522,7 @@ void Raytracer::genImage()
         #pragma omp critical
         {
             ++count;
-//            cout<<"\r----"<<(float)count/(float)image->height()*100.0<<"----";
+            cout<<"\r----"<<(float)count/(float)image->height()*100.0<<"----";
         }
        
         // get the thread number (0 == master thread) 
@@ -540,120 +549,68 @@ void Raytracer::genImage()
 
 QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 {
-    if (depth <= 0)
-    {
-        return backgroundColor;
-    }
-
     QColor color = backgroundColor;
 
-    // Get direction of ray
-    //float t = scalarProduct(dir, voxels.voxelSize);
-    // directions of ray
-    //float rayDir[3];
-    //rayDir[0] = (dir[0] < 0) ? -1 : 1;
-    //rayDir[1] = (dir[1] < 0) ? -1 : 1;
-    //rayDir[2] = (dir[2] < 0) ? -1 : 1;
+    if (depth <= 0)
+    {
+        return color;
+    }
+
+    // DEBUG:
+    //cout << "start (" << start[0] << "/" << start[1] << "/" << start[2]
+    //     << "), dir (" << dir[0] << "/" << dir[1] << "/" << dir[2] << ")" << endl;
 
     float minT = INFINITY, maxT = -INFINITY;
     float tempT;
 
-    Vector n100 = Vector(1, 0, 0), n010 = Vector(0, 1, 0), n001 = Vector(0, 0, 1);
-    float bn;
-
     // ------------------------------------------------------------------------
     // get nearest and farthest t for ray
 
-    // check y-z plane
-    // check x intersection and not parallel
-    bn = scalarProduct(dir, n100);
-    if (bn != 0)
+    // for all dimensions -> 3 d with 2 planes each
+    for (unsigned int i = 0; i < 3; i ++)
     {
-        tempT = scalarProduct(((voxels.origin + Vector(voxels.size[0], 0, 0)) - start), n100) / bn;
-        if ((tempT > 0) && (tempT < minT))
+        // != division by 0
+        if (dir[i] != 0)
         {
-            minT = tempT;
-        }
-        if ((tempT > 0) && (tempT > maxT))
-        {
-            maxT = tempT;
-        }
-        bn = scalarProduct(dir, n100 * -1);
-        tempT = scalarProduct((voxels.origin - start), n100 * -1) / bn;
-        if ((tempT > 0 ) && (tempT < minT))
-        {
-            minT = tempT;
-        }
-        if ((tempT > 0) && (tempT > maxT))
-        {
-            maxT = tempT;
-        }
-    }
+            tempT = (voxels.origin[i] - start[i]) / dir[i];
+            // tempT > 0 for object behind us
+            if (tempT > 0)
+            {
+                Vector p = start + dir * tempT;
+                // check if point of square and not outside
+                if ((p[(i + 1) % 3] >= voxels.origin[(i + 1) % 3]) &&
+                    (p[(i + 1) % 3] <= voxels.origin[(i + 1) % 3] + voxels.size[(i + 1) % 3]) &&
+                    (p[(i + 2) % 3] >= voxels.origin[(i + 2) % 3]) &&
+                    (p[(i + 2) % 3] <= voxels.origin[(i + 2) % 3] + voxels.size[(i + 2) % 3]))
+                {
+                    if (tempT < minT) minT = tempT;
+                    if (tempT > maxT) maxT = tempT;
+                }
+            }
 
-    // x-z plane
-    bn = scalarProduct(dir, n010);
-    if (bn != 0)
-    {
-        tempT = scalarProduct(((voxels.origin + Vector(0, voxels.size[1], 0)) - start), n010) / bn;
-        if ((tempT > 0) && (tempT < minT))
-        {
-            minT = tempT;
-        }
-        if ((tempT > 0) && (tempT > maxT))
-        {
-            maxT = tempT;
-        }
-        bn = scalarProduct(dir, n010 * -1);
-        tempT = scalarProduct((voxels.origin - start), n010 * -1) / bn;
-        if ((tempT > 0) && (tempT < minT))
-        {
-            minT = tempT;
-        }
-        if ((tempT > 0) && (tempT > maxT))
-        {
-            maxT = tempT;
-        }
-    }
-
-    // x-y plane
-    bn = scalarProduct(dir, n001);
-    if (bn != 0)
-    {
-        tempT = scalarProduct(((voxels.origin + Vector(0, 0, voxels.size[2])) - start), n001) / bn;
-        if ((tempT > 0) && (tempT < minT))
-        {
-            //Vector vt = start + dir * tempT;
-            //Vector vt2 = voxels.origin + voxels.size;
-            //if ((vt[0] > voxels.origin[0]) && (vt[1] > voxels.origin[1]) && (vt[0] < vt2[0]) && (vt[1] < vt2[1]))
-            minT = tempT;
-        }
-        if ((tempT > 0) && (tempT > maxT))
-        {
-            maxT = tempT;
-        }
-        bn = scalarProduct(dir, n001 * -1);
-        tempT = scalarProduct((voxels.origin - start), n001 * -1) / bn;
-        if ((tempT > 0) && (tempT < minT))
-        {
-            //Vector vt = start + dir * tempT;
-            //Vector vt2 = voxels.origin + voxels.size;
-            //if ((vt[0] > voxels.origin[0]) && (vt[1] > voxels.origin[1]) && (vt[0] < vt2[0]) && (vt[1] < vt2[1]))
-            minT = tempT;
-        }
-        if ((tempT > 0) && (tempT > maxT))
-        {
-            maxT = tempT;
+            tempT = (voxels.origin[i] + voxels.size[i] - start[i]) / dir[i];
+            if (tempT > 0)
+            {
+                Vector p = start + dir * tempT;
+                if ((p[(i + 1) % 3] >= voxels.origin[(i + 1) % 3]) &&
+                    (p[(i + 1) % 3] <= voxels.origin[(i + 1) % 3] + voxels.size[(i + 1) % 3]) &&
+                    (p[(i + 2) % 3] >= voxels.origin[(i + 2) % 3]) &&
+                    (p[(i + 2) % 3] <= voxels.origin[(i + 2) % 3] + voxels.size[(i + 2) % 3]))
+                {
+                    if (tempT < minT) minT = tempT;
+                    if (tempT > maxT) maxT = tempT;
+                }
+            }
         }
     }
 
     // no intersection with box
     if ((minT == INFINITY) || (maxT == -INFINITY))
     {
-        cout << "Outside box" << endl;
-        return backgroundColor;
+        //cout << "outside" << endl;
+        color.setRgb(0, 255, 0);
+        return color;
     }
-
-//    cout << "bn=" << bn << ", minT=" << minT << endl;
 
     // ------------------------------------------------------------------------
  
@@ -693,6 +650,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
             step[i] = 1;
         }
     }
+    // DEBUG:
 //    cout << "vStart = (" << voxel[0] << "/" << voxel[1] << "/" << voxel[2]
 //         << "), vStop = (" << lastVoxel[0] << "/" << lastVoxel[1] << "/" << lastVoxel[2] 
 //         << "), dT = (" << deltaT[0] << "/" << deltaT[1] << "/" << deltaT[2]
@@ -704,6 +662,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     // raytrace voxels
 
     float lastT = INFINITY;
+    float bn;
     int intersect = -1;
     const static unsigned int jumpMapAxis[8] = {2, 1, 2, 1, 2, 2, 0, 0};
     Vector p;
@@ -713,7 +672,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         unsigned int v = voxel[2] * voxels.resolution[0] * voxels.resolution[1] +
                          voxel[1] * voxels.resolution[0] + voxel[0];
         Voxel vox = voxels.voxels[v];
-//        cout << "In Voxel " << v << ": (" << vox.vertices.size() << ")" << endl;
+//        cout << "-> [" << v << "] ";
 
         // compute triangle intersections
         for (unsigned int i = 0; i < vox.vertices.size(); i ++)
@@ -807,6 +766,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         if (voxel[axis] == lastVoxel[axis]) break;
         nextCrossingT[axis] += deltaT[axis];
     }
+//    cout << endl;
 
 //    cout << "dir = (" << dir[0] << "/" << dir[1] << "/" << dir[2] << "), lastT = (" << lastT
 //         << "), p = (" << p[0] << "/" << p[1] << "/" << p[2] << "), v = (" << intersect
