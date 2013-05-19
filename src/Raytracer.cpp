@@ -354,11 +354,11 @@ void Raytracer::generateVoxels()
     //                          << voxels.voxelSize[2] << ")" << endl;
 
     // generate voxels (assign triangles later)
-    for (unsigned int x = 0; x < voxelNumX; x ++)
+    for (unsigned int z = 0; z < voxelNumZ; z ++)
     {
         for (unsigned int y = 0; y < voxelNumY; y ++)
         {
-            for (unsigned int z = 0; z < voxelNumZ; z ++)
+            for (unsigned int x = 0; x < voxelNumX; x ++)
             {
                 Voxel v;
                 v.pos = Vector(minX + x * voxels.voxelSize[0],
@@ -428,6 +428,11 @@ void Raytracer::generateVoxels()
                 }
             }
         }
+        // TEST: assign all triangles to all voxels
+        //for (unsigned int j = 0; j < voxels.voxels.size(); j ++)
+        //{
+        //    voxels.voxels[j].vertices.push_back(i);
+        //}
     }
 
     // DEBUG: Output voxels with vertices
@@ -508,7 +513,7 @@ void Raytracer::genImage()
         #pragma omp critical
         {
             ++count;
-            cout<<"\r----"<<(float)count/(float)image->height()*100.0<<"----";
+//            cout<<"\r----"<<(float)count/(float)image->height()*100.0<<"----";
         }
        
         // get the thread number (0 == master thread) 
@@ -561,7 +566,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 
     // check y-z plane
     // check x intersection and not parallel
-    /*bn = scalarProduct(dir, n100);
+    bn = scalarProduct(dir, n100);
     if (bn != 0)
     {
         tempT = scalarProduct(((voxels.origin + Vector(voxels.size[0], 0, 0)) - start), n100) / bn;
@@ -569,7 +574,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         {
             minT = tempT;
         }
-        if (tempT > maxT)
+        if ((tempT > 0) && (tempT > maxT))
         {
             maxT = tempT;
         }
@@ -579,7 +584,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         {
             minT = tempT;
         }
-        if (tempT > maxT)
+        if ((tempT > 0) && (tempT > maxT))
         {
             maxT = tempT;
         }
@@ -594,7 +599,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         {
             minT = tempT;
         }
-        if (tempT > maxT)
+        if ((tempT > 0) && (tempT > maxT))
         {
             maxT = tempT;
         }
@@ -604,11 +609,11 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         {
             minT = tempT;
         }
-        if (tempT > maxT)
+        if ((tempT > 0) && (tempT > maxT))
         {
             maxT = tempT;
         }
-    }*/
+    }
 
     // x-y plane
     bn = scalarProduct(dir, n001);
@@ -622,7 +627,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
             //if ((vt[0] > voxels.origin[0]) && (vt[1] > voxels.origin[1]) && (vt[0] < vt2[0]) && (vt[1] < vt2[1]))
             minT = tempT;
         }
-        if (tempT > maxT)
+        if ((tempT > 0) && (tempT > maxT))
         {
             maxT = tempT;
         }
@@ -635,10 +640,17 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
             //if ((vt[0] > voxels.origin[0]) && (vt[1] > voxels.origin[1]) && (vt[0] < vt2[0]) && (vt[1] < vt2[1]))
             minT = tempT;
         }
-        if (tempT > maxT)
+        if ((tempT > 0) && (tempT > maxT))
         {
             maxT = tempT;
         }
+    }
+
+    // no intersection with box
+    if ((minT == INFINITY) || (maxT == -INFINITY))
+    {
+        cout << "Outside box" << endl;
+        return backgroundColor;
     }
 
 //    cout << "bn=" << bn << ", minT=" << minT << endl;
@@ -648,41 +660,53 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     int voxel[3], lastVoxel[3], step[3];
     Vector deltaT, nextCrossingT;
 
-    Vector rayI = start + dir * minT;
-//    cout << "Inter: (" << rayI[0] << "/" << rayI[1] << "/" << rayI[2] << ")" << endl;
+//    Vector rayI = start + dir * minT;
+//    cout << "Inter min: (" << rayI[0] << "/" << rayI[1] << "/" << rayI[2] << ")" << endl;
+//    rayI = start + dir * maxT;
+//    cout << "Inter max: (" << rayI[0] << "/" << rayI[1] << "/" << rayI[2] << ")" << endl;
+
 
     // need voxel coordinates and step
     for (unsigned int i = 0; i < 3; i ++)
     {
         float rayOrigVoxel = ((start[0] + (dir[0] * minT)) - voxels.origin[i]);
+        // DEBUG:
+        //cout << "rayOrigVoxel = (" << rayOrigVoxel << "), voxel[" << i << "] = ("
+        //     << rayOrigVoxel / voxels.voxelSize[i] << ")" << endl;
         voxel[i] = std::max(0, std::min((int) (rayOrigVoxel / voxels.voxelSize[i]),
                                         (int) voxels.resolution[i] - 1));
         if (dir[i] < 0)
         {
-            deltaT[i] = - voxels.voxelSize[i] * 1.f / dir[i]; // ?
-            nextCrossingT[i] = minT + (voxel[i] * voxels.voxelSize[i] - rayOrigVoxel) * 1.f / dir[i]; // ?
+            deltaT[i] = - voxels.voxelSize[i] * 1 / dir[i]; // ?
+            nextCrossingT[i] = minT + (voxel[i] * voxels.voxelSize[i] - rayOrigVoxel) * 1 / dir[i]; // ?
 
             lastVoxel[i] = -1;
             step[i] = -1;
         }
         else
         {
-            deltaT[i] = voxels.voxelSize[i] * 1.f / dir[i];
+            deltaT[i] = voxels.voxelSize[i] * 1 / dir[i];
             nextCrossingT[i] = minT + ((voxel[i] + 1) * voxels.voxelSize[i] -
-                                rayOrigVoxel) * 1.f / dir[i];
+                                rayOrigVoxel) * 1 / dir[i];
 
             lastVoxel[i] = voxels.resolution[i];
             step[i] = 1;
         }
     }
+//    cout << "vStart = (" << voxel[0] << "/" << voxel[1] << "/" << voxel[2]
+//         << "), vStop = (" << lastVoxel[0] << "/" << lastVoxel[1] << "/" << lastVoxel[2] 
+//         << "), dT = (" << deltaT[0] << "/" << deltaT[1] << "/" << deltaT[2]
+//         << "), nCT = (" << nextCrossingT[0] << "/" << nextCrossingT[1] << "/"
+//                         << nextCrossingT[2] << ")" << endl;
 
     // ------------------------------------------------------------------------
 
     // raytrace voxels
 
-    float lastT = -INFINITY;
+    float lastT = INFINITY;
     int intersect = -1;
     const static unsigned int jumpMapAxis[8] = {2, 1, 2, 1, 2, 2, 0, 0};
+    Vector p;
 
     while(true)
     {
@@ -711,7 +735,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
             }
 
             // ray(t) = e + (b * t)
-            Vector p = start + (dir * t);
+            p = start + (dir * t);
             //cout << "Intersection at (" << p[0] << "/" << p[1] << "/" << p[2] << ")" << endl;
 
             //float alpha0, alpha1, alpha2, area;
@@ -749,10 +773,15 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
             }
         }
 
+//        cout << "dir = (" << dir[0] << "/" << dir[1] << "/" << dir[2] << "), t = (" << lastT
+//             << "), p = (" << p[0] << "/" << p[1] << "/" << p[2] << "), tri = (" << intersect
+//             << "), vox = (" << v  << ")" << endl;
+
+
         if (intersect != -1)
         {
             // compute color
-            float col = 255 * ((v+1) / (float) triangles.size());
+            float col = 255 * ((intersect + 1) / (float) triangles.size());
             color.setRgb(col, col, col);
 
             for (unsigned int i = 0; i < lights.size(); i ++)
@@ -770,11 +799,19 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
                          ((nextCrossingT[2] < nextCrossingT[0]));
         unsigned int axis = jumpMapAxis[k];
 
+        //cout << "maxT = " << maxT << ", nextCrossingT[" << axis << "] = " << nextCrossingT[axis] << endl;
         if (maxT < nextCrossingT[axis]) break;
         voxel[axis] += step[axis];
+        //cout << "voxel[" << axis << "] = " << voxel[axis]
+        //     << ", lastVoxel[" << axis << "] = " << lastVoxel[axis] << endl;
         if (voxel[axis] == lastVoxel[axis]) break;
         nextCrossingT[axis] += deltaT[axis];
     }
+
+//    cout << "dir = (" << dir[0] << "/" << dir[1] << "/" << dir[2] << "), lastT = (" << lastT
+//         << "), p = (" << p[0] << "/" << p[1] << "/" << p[2] << "), v = (" << intersect
+//         << "), voxel = (" << v  << ")" << endl;
+
 
     // no voxel with no triangle for intersection ...
     if (intersect == -1)
