@@ -1,6 +1,7 @@
 #include "Raytracer.h"
 #include <fstream>
 #include <omp.h>
+#include <math.h>
 
 #include <iostream>
 using namespace std;
@@ -321,6 +322,7 @@ void Raytracer::genImage()
                 gluUnProject( (float)i, (float)j, zValues[j*image->width()+i], mvMatrix, projMatrix, viewPort, &dX, &dY, &dZ );
                 Vector intersection(dX, dY, dZ);
                 Vector dir = intersection - camera;
+                dir.normalize();
                 c = raytrace(camera, dir, MAX_DEPTH);
                                                 
             }
@@ -360,7 +362,6 @@ void Raytracer::genImage()
     updateGL();
 }
 
-
 QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 {
     if (depth <= 0)
@@ -372,14 +373,20 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 
     // compute all intersections
     int v = -1;
-    float lastT = -1;
+    float lastT = INFINITY;
+
+    Triangle tri;
+    Vector p;
+    float area;
+    Vector areaV[3];
+
     for (unsigned int j = 0; j < triangles.size(); j ++)
     {
-        Triangle tri= triangles[j];
+        tri = triangles[j];
         float bn = scalarProduct(dir, tri.planeNormal);
 
         // check if parallel
-        if ((bn < 0.00001) && (-0.00001 < bn))
+        if (bn == 0)
         {
             continue;
         }
@@ -392,37 +399,24 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         }
 
         // ray(t) = e + (b * t)
-        Vector p = start + (dir * t);
-
-        //float alpha0, alpha1, alpha2, area;
-        Vector area0v, area1v, area2v;
+        p = start + (dir * t);
 
         // area(p0, p1, p2) = 0.5 * || (p1 - p0) x (p2 - p0) ||
-        //area = crossProduct(tri.vertices[1] - tri.vertices[0],
-        //                    tri.vertices[2] - tri.vertices[0]).norm() * 0.5;
+        area = crossProduct(tri.vertices[1] - tri.vertices[0],
+                            tri.vertices[2] - tri.vertices[0]).norm() * 0.5;
 
         // check if point in triangle
-        area0v = crossProduct(tri.vertices[1] - p,
-                              tri.vertices[2] - p);
-        if (scalarProduct(area0v, tri.planeNormal) < 0) continue;
-        area1v = crossProduct(tri.vertices[2] - p,
-                              tri.vertices[0] - p);
-        if (scalarProduct(area1v, tri.planeNormal) < 0) continue;
-        area2v = crossProduct(tri.vertices[0] - p,
-                              tri.vertices[1] - p);
-        if (scalarProduct(area2v, tri.planeNormal) < 0) continue;
+        areaV[0] = crossProduct(tri.vertices[1] - p,
+                                tri.vertices[2] - p);
+        if (scalarProduct(areaV[0], tri.planeNormal) < 0) continue;
+        areaV[1] = crossProduct(tri.vertices[2] - p,
+                                tri.vertices[0] - p);
+        if (scalarProduct(areaV[1], tri.planeNormal) < 0) continue;
+        areaV[2] = crossProduct(tri.vertices[0] - p,
+                                tri.vertices[1] - p);
+        if (scalarProduct(areaV[2], tri.planeNormal) < 0) continue;
 
-        //alpha0 = (area0v.norm() * 0.5) / area;
-        //alpha1 = (area1v.norm() * 0.5) / area;
-        //alpha2 = (area2v.norm() * 0.5) / area;
-        //float alpha = alpha0 + alpha1 + alpha2;
-        //if (alpha < 0.99999 || alpha > 1.00001) continue;
-
-        //Vector p = alpha0 * tri.vertices[0] +
-        //           alpha1 * tri.vertices[1] +
-        //           alpha2 * tri.vertices[2];
-
-        if ((lastT > t) || (lastT == -1))
+        if (lastT > t)
         {
             lastT = t;
             v = j;
@@ -435,15 +429,75 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     }
     else
     {
-        // compute color
-        float col = 255 * ((v+1) / (float) triangles.size());
-        color.setRgb(col, col, col);
+        float alpha[3];
 
+        alpha[0] = (areaV[0].norm() * 0.5) / area;
+        alpha[1] = (areaV[1].norm() * 0.5) / area;
+        alpha[2] = (areaV[2].norm() * 0.5) / area;
+        float alphaSum = alpha[0] + alpha[1] + alpha[2];
+
+        // Phong
+        // n = alpha0 * n0 + alpha1 * n1 + alpha2 * n2
+        Vector pn = tri.normals[0] * alpha[0] +
+                    tri.normals[1] * alpha[1] +
+                    tri.normals[2] * alpha[2];
+        pn.normalize();
+
+        // a = - b (== dir)
+        Vector invDir = dir * (-1.f);
+        float inv = scalarProduct(invDir, pn);//.normalize();
+        if (inv < 0) pn = pn * (-1.f);
+
+        Material mat = tri.material;
+
+        float I_ges[3];
+        I_ges[0] = ambientLight.redF() * mat.ambient[0];
+        I_ges[1] = ambientLight.greenF() * mat.ambient[1];
+        I_ges[2] = ambientLight.blueF() * mat.ambient[2];
+
+        // for all lights
         for (unsigned int i = 0; i < lights.size(); i ++)
         {
-            // compute ray to light source
-            // ...
+            Lightsource lig = lights[i];
+            // l - Vector to lightsource
+            Vector l = lig.position - p;
+            l.normalize();
+
+            // r = 2 * (n * l) * n - l
+            Vector refl = (crossProduct(crossProduct(pn, l), pn) * 2) - l;
+
+            // check visibility ?
+            float pnl = scalarProduct(pn, l);
+            // n * l < 90° --> pnl > 0 (cos)
+            if (pnl < 0)
+            {
+                continue;
+            }
+            else
+            {
+                // check for intersection with triangle before light source
+
+                float fatt = 1.f;
+                if ((lig.constAtt != 0) && (lig.linAtt != 0) && (lig.quadAtt != 0))
+                {
+                    float d = l.norm();
+                    fatt = 1.f / (lig.constAtt + d * lig.linAtt + d * d * lig.quadAtt);
+                }
+                // f_att(d) * (I_d * O_d * (n * l) + I_s * O_s * (max(0, (r * a)))^s
+                float ridp = pow(std::max(0.f, scalarProduct(refl, invDir)), mat.shininess);
+                I_ges[0] += fatt * (lig.diffuse[0] * mat.diffuse[0] * pnl + 
+                                    lig.specular[0] * mat.specular[0] * ridp);
+                I_ges[1] += fatt * (lig.diffuse[1] * mat.diffuse[1] * pnl +
+                                    lig.specular[1] * mat.specular[1] * ridp);
+                I_ges[2] += fatt * (lig.diffuse[2] * mat.diffuse[2] * pnl +
+                                    lig.specular[2] * mat.specular[2] * ridp);
+            }
         }
+
+        // set color
+        //float col = 255 * ((v+1) / (float) triangles.size());
+        //cout << I_ges[0] << ", " << I_ges[1] << ", " << I_ges[2] << endl;
+        color.setRgbF(I_ges[0], I_ges[1], I_ges[2]);
     }
 
     return color;
