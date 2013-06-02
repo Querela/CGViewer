@@ -380,6 +380,34 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     float area;
     Vector areaV[3];
 
+    // get smallest t for light source intersection -> phong (triangle before lightsource?)
+    for (unsigned int j = 0; j < lights.size(); j ++)
+    {
+        Lightsource lig = lights[j];
+        //float t = (lig.position - start) / dir;
+        Vector p_s = lig.position - start;
+        float ts[3];
+        // get all t's
+        ts[0] = p_s[0] / dir[0];
+        ts[1] = p_s[1] / dir[1];
+        ts[2] = p_s[2] / dir[2];
+
+        // default to change nothing
+        float t = INFINITY;
+
+        // only if in all dimensions the same t
+        if ((ts[0] == ts[1]) && (ts[1] == ts[2]))
+        {
+            t = ts[0];
+        }
+
+        // update shortest t to get nearest lightsoure and only triangles between ls and viewpoint
+        if (lastT > t)
+        {
+            lastT = t;
+        }
+    }
+
     for (unsigned int j = 0; j < triangles.size(); j ++)
     {
         tri = triangles[j];
@@ -476,6 +504,8 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
             else
             {
                 // check for intersection with triangle before light source
+                // seg fault ... ?
+                //if (backgroundColor != raytrace(p, invDir, 1)) continue;
 
                 float fatt = 1.f;
                 if ((lig.constAtt != 0) && (lig.linAtt != 0) && (lig.quadAtt != 0))
