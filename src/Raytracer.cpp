@@ -362,6 +362,59 @@ void Raytracer::genImage()
     updateGL();
 }
 
+int intersect(Triangle tri, Vector start, Vector dir, float& dist, float alpha[3])
+{
+    float bn = scalarProduct(dir, tri.planeNormal);
+
+    // check if parallel
+    if (bn == 0)
+    {
+        return 0;
+    }
+
+    // get t =  ((p - e) * n) / (b * n)
+    float t = scalarProduct((tri.vertices[0] - start), tri.planeNormal) / bn;
+    if (t < 0)
+    {
+        return 0;
+    }
+
+    // ray(t) = e + (b * t)
+    p = start + (dir * t);
+
+    // area(p0, p1, p2) = 0.5 * || (p1 - p0) x (p2 - p0) ||
+    float area = crossProduct(tri.vertices[1] - tri.vertices[0],
+                        tri.vertices[2] - tri.vertices[0]).norm() * 0.5;
+
+    float areaV[3];
+
+    // check if point in triangle
+    areaV[0] = crossProduct(tri.vertices[1] - p,
+                            tri.vertices[2] - p);
+    if (scalarProduct(areaV[0], tri.planeNormal) < 0) continue;
+    areaV[1] = crossProduct(tri.vertices[2] - p,
+                            tri.vertices[0] - p);
+    if (scalarProduct(areaV[1], tri.planeNormal) < 0) continue;
+    areaV[2] = crossProduct(tri.vertices[0] - p,
+                            tri.vertices[1] - p);
+    if (scalarProduct(areaV[2], tri.planeNormal) < 0) continue;
+
+    if (dist > t)
+    {
+        dist = t;
+
+        alpha[0] = (areaV[0].norm() * 0.5) / area;
+        alpha[1] = (areaV[1].norm() * 0.5) / area;
+        alpha[2] = (areaV[2].norm() * 0.5) / area;
+
+        return 1;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
 QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 {
     if (depth <= 0)
@@ -369,16 +422,13 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         return backgroundColor;
     }
 
-    QColor color = backgroundColor;
-
     // compute all intersections
     int v = -1;
     float lastT = INFINITY;
 
     Triangle tri;
     Vector p;
-    float area;
-    Vector areaV[3];
+    float alpha[3];
 
     // get smallest t for light source intersection -> phong (triangle before lightsource?)
     for (unsigned int j = 0; j < lights.size(); j ++)
@@ -408,62 +458,36 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         }
     }
 
+    // intersection test for triangles
     for (unsigned int j = 0; j < triangles.size(); j ++)
     {
         tri = triangles[j];
-        float bn = scalarProduct(dir, tri.planeNormal);
 
-        // check if parallel
-        if (bn == 0)
+        int intersected = intersect(tri, start, dir, lastT, alpha)
+
+        // update index of intersected triangle
+        if (intersected == 1)
         {
-            continue;
-        }
-
-        // get t =  ((p - e) * n) / (b * n)
-        float t = scalarProduct((tri.vertices[0] - start), tri.planeNormal) / bn;
-        if (t < 0)
-        {
-            continue;
-        }
-
-        // ray(t) = e + (b * t)
-        p = start + (dir * t);
-
-        // area(p0, p1, p2) = 0.5 * || (p1 - p0) x (p2 - p0) ||
-        area = crossProduct(tri.vertices[1] - tri.vertices[0],
-                            tri.vertices[2] - tri.vertices[0]).norm() * 0.5;
-
-        // check if point in triangle
-        areaV[0] = crossProduct(tri.vertices[1] - p,
-                                tri.vertices[2] - p);
-        if (scalarProduct(areaV[0], tri.planeNormal) < 0) continue;
-        areaV[1] = crossProduct(tri.vertices[2] - p,
-                                tri.vertices[0] - p);
-        if (scalarProduct(areaV[1], tri.planeNormal) < 0) continue;
-        areaV[2] = crossProduct(tri.vertices[0] - p,
-                                tri.vertices[1] - p);
-        if (scalarProduct(areaV[2], tri.planeNormal) < 0) continue;
-
-        if (lastT > t)
-        {
-            lastT = t;
             v = j;
         }
     }
 
+    // no intersection with triangle
     if (v == -1)
     {
-        color = backgroundColor;
+        // we intersected a light source
+        if (lastT != INFINITY)
+        {
+            color.setRgbF(1, 1, 1);
+        }
+        // nothing was intersected -> background
+        else
+        {
+            color = backgroundColor;
+        }
     }
     else
     {
-        float alpha[3];
-
-        alpha[0] = (areaV[0].norm() * 0.5) / area;
-        alpha[1] = (areaV[1].norm() * 0.5) / area;
-        alpha[2] = (areaV[2].norm() * 0.5) / area;
-        float alphaSum = alpha[0] + alpha[1] + alpha[2];
-
         // Phong
         // n = alpha0 * n0 + alpha1 * n1 + alpha2 * n2
         Vector pn = tri.normals[0] * alpha[0] +
@@ -473,7 +497,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 
         // a = - b (== dir)
         Vector invDir = dir * (-1.f);
-        float inv = scalarProduct(invDir, pn);//.normalize();
+        float inv = scalarProduct(invDir, pn).normalize();
         if (inv < 0) pn = pn * (-1.f);
 
         Material mat = tri.material;
@@ -491,8 +515,8 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
             Vector l = lig.position - p;
             l.normalize();
 
-            // r = 2 * (n * l) * n - l
-            Vector refl = (crossProduct(crossProduct(pn, l), pn) * 2) - l;
+            // r = 2 * (n x l) * n - l
+            Vector refl = (pn * scalarProduct(pn, l) * 2) - l;
 
             // check visibility ?
             float pnl = scalarProduct(pn, l);
@@ -513,7 +537,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
                     float d = l.norm();
                     fatt = 1.f / (lig.constAtt + d * lig.linAtt + d * d * lig.quadAtt);
                 }
-                // f_att(d) * (I_d * O_d * (n * l) + I_s * O_s * (max(0, (r * a)))^s
+                // f_att(d) * (I_d * O_d * (n x l) + I_s * O_s * (max(0, (r x a)))^s
                 float ridp = pow(std::max(0.f, scalarProduct(refl, invDir)), mat.shininess);
                 I_ges[0] += fatt * (lig.diffuse[0] * mat.diffuse[0] * pnl + 
                                     lig.specular[0] * mat.specular[0] * ridp);
