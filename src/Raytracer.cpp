@@ -362,42 +362,42 @@ void Raytracer::genImage()
     updateGL();
 }
 
-int intersect(Triangle tri, Vector start, Vector dir, float& dist, float alpha[3])
+int Raytracer::intersect(Triangle tri, Vector start, Vector dir, float& dist, float alpha[3])
 {
     float bn = scalarProduct(dir, tri.planeNormal);
 
     // check if parallel
     if (bn == 0)
     {
-        return 0;
+        return R_MISS;
     }
 
     // get t =  ((p - e) * n) / (b * n)
     float t = scalarProduct((tri.vertices[0] - start), tri.planeNormal) / bn;
     if (t < 0)
     {
-        return 0;
+        return R_MISS;
     }
 
     // ray(t) = e + (b * t)
-    p = start + (dir * t);
+    Vector p = start + (dir * t);
 
     // area(p0, p1, p2) = 0.5 * || (p1 - p0) x (p2 - p0) ||
     float area = crossProduct(tri.vertices[1] - tri.vertices[0],
                         tri.vertices[2] - tri.vertices[0]).norm() * 0.5;
 
-    float areaV[3];
+    Vector areaV[3];
 
     // check if point in triangle
     areaV[0] = crossProduct(tri.vertices[1] - p,
                             tri.vertices[2] - p);
-    if (scalarProduct(areaV[0], tri.planeNormal) < 0) continue;
+    if (scalarProduct(areaV[0], tri.planeNormal) < 0) return R_MISS;
     areaV[1] = crossProduct(tri.vertices[2] - p,
                             tri.vertices[0] - p);
-    if (scalarProduct(areaV[1], tri.planeNormal) < 0) continue;
+    if (scalarProduct(areaV[1], tri.planeNormal) < 0) return R_MISS;
     areaV[2] = crossProduct(tri.vertices[0] - p,
                             tri.vertices[1] - p);
-    if (scalarProduct(areaV[2], tri.planeNormal) < 0) continue;
+    if (scalarProduct(areaV[2], tri.planeNormal) < 0) return R_MISS;
 
     if (dist > t)
     {
@@ -407,11 +407,11 @@ int intersect(Triangle tri, Vector start, Vector dir, float& dist, float alpha[3
         alpha[1] = (areaV[1].norm() * 0.5) / area;
         alpha[2] = (areaV[2].norm() * 0.5) / area;
 
-        return 1;
+        return R_HIT;
     }
     else
     {
-        return 0;
+        return R_MISS;
     }
 }
 
@@ -424,10 +424,10 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 
     // compute all intersections
     int v = -1;
+    Vector p;
     float lastT = INFINITY;
 
     Triangle tri;
-    Vector p;
     float alpha[3];
 
     // get smallest t for light source intersection -> phong (triangle before lightsource?)
@@ -463,14 +463,16 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     {
         tri = triangles[j];
 
-        int intersected = intersect(tri, start, dir, lastT, alpha)
+        int intersected = intersect(tri, start, dir, lastT, alpha);
 
         // update index of intersected triangle
-        if (intersected == 1)
+        if (intersected == R_HIT)
         {
             v = j;
         }
     }
+
+    QColor color;
 
     // no intersection with triangle
     if (v == -1)
@@ -495,9 +497,11 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
                     tri.normals[2] * alpha[2];
         pn.normalize();
 
+        p = start + (dir * lastT);
+
         // a = - b (== dir)
         Vector invDir = dir * (-1.f);
-        float inv = scalarProduct(invDir, pn).normalize();
+        float inv = scalarProduct(invDir, pn);
         if (inv < 0) pn = pn * (-1.f);
 
         Material mat = tri.material;
@@ -528,8 +532,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
             else
             {
                 // check for intersection with triangle before light source
-                // seg fault ... ?
-                //if (backgroundColor != raytrace(p, invDir, 1)) continue;
+                //if (backgroundColor != raytrace(p, l, 1)) continue;
 
                 float fatt = 1.f;
                 if ((lig.constAtt != 0) && (lig.linAtt != 0) && (lig.quadAtt != 0))
@@ -549,9 +552,10 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         }
 
         // set color
-        //float col = 255 * ((v+1) / (float) triangles.size());
+        float col = 255 * ((v+1) / (float) triangles.size());
         //cout << I_ges[0] << ", " << I_ges[1] << ", " << I_ges[2] << endl;
-        color.setRgbF(I_ges[0], I_ges[1], I_ges[2]);
+        color.setRgbF(I_ges[0], I_ges[1], I_ges[2]); // great but useless ...
+        //color.setRgb(col * I_ges[0], col * I_ges[1], col * I_ges[2]); // even greater
     }
 
     return color;

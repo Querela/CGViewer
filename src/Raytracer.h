@@ -11,6 +11,9 @@
 
 #define MAX_DEPTH 4
 
+#define R_MISS 0
+#define R_HIT 1
+
 class Raytracer : public QGLWidget
 {
     Q_OBJECT
@@ -28,6 +31,7 @@ class Raytracer : public QGLWidget
         private:
             void init();
             bool initShaders();
+            int intersect(Triangle tri, Vector start, Vector dir, float& dist, float alpha[3]);
             QColor raytrace(Vector r, Vector e, int depth);
             QImage *image;
             QImage finalImage;
