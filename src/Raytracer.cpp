@@ -362,6 +362,8 @@ void Raytracer::genImage()
     updateGL();
 }
 
+// ------------------------------------------------------------------------------------------------
+
 int Raytracer::intersect(Triangle tri, Vector start, Vector dir, float& dist, float alpha[3])
 {
     float bn = scalarProduct(dir, tri.planeNormal);
@@ -379,6 +381,7 @@ int Raytracer::intersect(Triangle tri, Vector start, Vector dir, float& dist, fl
         return R_MISS;
     }
 
+    // point of intersection
     // ray(t) = e + (b * t)
     Vector p = start + (dir * t);
 
@@ -399,6 +402,7 @@ int Raytracer::intersect(Triangle tri, Vector start, Vector dir, float& dist, fl
                             tri.vertices[1] - p);
     if (scalarProduct(areaV[2], tri.planeNormal) < 0) return R_MISS;
 
+    // update values if nearest hit so far
     if (dist > t)
     {
         dist = t;
@@ -423,7 +427,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     }
 
     // compute all intersections
-    int v = -1;
+    int v = NO_TRIANGLE;
     Vector p;
     float lastT = INFINITY;
 
@@ -445,7 +449,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         // default to change nothing
         float t = INFINITY;
 
-        // only if in all dimensions the same t
+        // only if in all dimensions the same t since it is a point lightsource
         if ((ts[0] == ts[1]) && (ts[1] == ts[2]))
         {
             t = ts[0];
@@ -456,6 +460,8 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         {
             lastT = t;
         }
+
+        //cout << "lightsource intersection" << endl;
     }
 
     // intersection test for triangles
@@ -463,19 +469,18 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     {
         tri = triangles[j];
 
-        int intersected = intersect(tri, start, dir, lastT, alpha);
-
         // update index of intersected triangle
-        if (intersected == R_HIT)
+        if (R_HIT == intersect(tri, start, dir, lastT, alpha))
         {
             v = j;
         }
     }
 
+    // return color
     QColor color;
 
     // no intersection with triangle
-    if (v == -1)
+    if (v == NO_TRIANGLE)
     {
         // we intersected a light source
         if (lastT != INFINITY)
@@ -491,22 +496,30 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     else
     {
         // Phong
+
         // n = alpha0 * n0 + alpha1 * n1 + alpha2 * n2
         Vector pn = tri.normals[0] * alpha[0] +
                     tri.normals[1] * alpha[1] +
                     tri.normals[2] * alpha[2];
         pn.normalize();
 
+        // point of intersection -> see intersection method
         p = start + (dir * lastT);
 
+        // inverse view direction
         // a = - b (== dir)
         Vector invDir = dir * (-1.f);
+
+        // check if angle greater 90° -> invert normal vector at intersection
         float inv = scalarProduct(invDir, pn);
         if (inv < 0) pn = pn * (-1.f);
 
         Material mat = tri.material;
 
+        // intensity for red, green, blue
         float I_ges[3];
+
+        // get ambient intensity
         I_ges[0] = ambientLight.redF() * mat.ambient[0];
         I_ges[1] = ambientLight.greenF() * mat.ambient[1];
         I_ges[2] = ambientLight.blueF() * mat.ambient[2];
@@ -561,6 +574,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     return color;
 }
 
+// ------------------------------------------------------------------------------------------------
 
 void Raytracer::keyPressEvent(QKeyEvent *event)
 {

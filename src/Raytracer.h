@@ -11,6 +11,7 @@
 
 #define MAX_DEPTH 4
 
+#define NO_TRIANGLE -1
 #define R_MISS 0
 #define R_HIT 1
 
