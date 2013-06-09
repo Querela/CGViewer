@@ -373,13 +373,15 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     // compute all intersections
     int v = -1;
     float lastT = -1;
+    Triangle tri;
+    Vector p;
     for (unsigned int j = 0; j < triangles.size(); j ++)
     {
-        Triangle tri= triangles[j];
+        tri= triangles[j];
         float bn = scalarProduct(dir, tri.planeNormal);
 
         // check if parallel
-        if ((bn < 0.00001) && (-0.00001 < bn))
+        if (bn == 0)
         {
             continue;
         }
@@ -392,7 +394,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         }
 
         // ray(t) = e + (b * t)
-        Vector p = start + (dir * t);
+        p = start + (dir * t);
 
         //float alpha0, alpha1, alpha2, area;
         Vector area0v, area1v, area2v;
@@ -435,14 +437,35 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     }
     else
     {
-        // compute color
-        float col = 255 * ((v+1) / (float) triangles.size());
-        color.setRgb(col, col, col);
-
-        for (unsigned int i = 0; i < lights.size(); i ++)
+        if (tri.material.isTexture)
         {
-            // compute ray to light source
-            // ...
+            // direction x: v0 -> v1
+            Vector tri_r = tri.vertices[1] - tri.vertices[0];
+            // scale to 0..1 with 1 / dir_x
+            float d1 = 1.f / tri_r.norm();
+
+            // scale to 0..1 with 1 / (height of v2 on v0->v1)
+            float d2 = 1.f / ((crossProduct(tri_r, (tri.vertices[2]-tri.vertices[0]))).norm() * d1);
+
+            // get parameter of line equation with shortest distance ... && should be between 0..1
+            float p_x = (scalarProduct(tri_r, tri.vertices[0] - p) * tri_r.normSquare());
+
+            // get height of point on v0 -> v1  && scale with d2 (height of 3. vertice)
+            float p_y = (crossProduct(tri.vertices[1], (p - tri.vertices[0]))).norm() * d2;
+
+            // --> values are too large
+            cout << "s: " << p_x << ", t: " << p_y << endl;
+
+            // get color from texture ...
+            // how to use tri.texCoords[] ?
+            QImage tex = tri.material.texture;
+            color.setRgb(tex.pixel(p_x, p_y));
+        }
+        else
+        {
+            // compute color with index of triangle
+            float col = 255 * ((v+1) / (float) triangles.size());
+            color.setRgb(col, col, col);
         }
     }
 
