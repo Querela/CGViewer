@@ -375,6 +375,9 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     float lastT = -1;
     Triangle tri;
     Vector p;
+
+    float alpha0, alpha1, alpha2;
+
     for (unsigned int j = 0; j < triangles.size(); j ++)
     {
         tri= triangles[j];
@@ -400,8 +403,8 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         Vector area0v, area1v, area2v;
 
         // area(p0, p1, p2) = 0.5 * || (p1 - p0) x (p2 - p0) ||
-        //area = crossProduct(tri.vertices[1] - tri.vertices[0],
-        //                    tri.vertices[2] - tri.vertices[0]).norm() * 0.5;
+        float area = crossProduct(tri.vertices[1] - tri.vertices[0],
+                                   tri.vertices[2] - tri.vertices[0]).norm() * 0.5;
 
         // check if point in triangle
         area0v = crossProduct(tri.vertices[1] - p,
@@ -414,9 +417,9 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
                               tri.vertices[1] - p);
         if (scalarProduct(area2v, tri.planeNormal) < 0) continue;
 
-        //alpha0 = (area0v.norm() * 0.5) / area;
-        //alpha1 = (area1v.norm() * 0.5) / area;
-        //alpha2 = (area2v.norm() * 0.5) / area;
+        alpha0 = (area0v.norm() * 0.5) / area;
+        alpha1 = (area1v.norm() * 0.5) / area;
+        alpha2 = (area2v.norm() * 0.5) / area;
         //float alpha = alpha0 + alpha1 + alpha2;
         //if (alpha < 0.99999 || alpha > 1.00001) continue;
 
@@ -439,27 +442,17 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
     {
         if (tri.material.isTexture)
         {
-            // direction x: v0 -> v1
-            Vector tri_r = tri.vertices[1] - tri.vertices[0];
-            // scale to 0..1 with 1 / dir_x
-            float d1 = 1.f / tri_r.norm();
+            QImage tex = tri.material.texture;
+            Vector tp = tri.texCoords[0] * alpha0 +
+                        tri.texCoords[1] * alpha1 + 
+                        tri.texCoords[2] * alpha2;
+            float s = tp[0] * tex.width();
+            float t = (1.f - tp[1]) * tex.height();
 
-            // scale to 0..1 with 1 / (height of v2 on v0->v1)
-            float d2 = 1.f / ((crossProduct(tri_r, (tri.vertices[2]-tri.vertices[0]))).norm() * d1);
-
-            // get parameter of line equation with shortest distance ... && should be between 0..1
-            float p_x = (scalarProduct(tri_r, tri.vertices[0] - p) * tri_r.normSquare());
-
-            // get height of point on v0 -> v1  && scale with d2 (height of 3. vertice)
-            float p_y = (crossProduct(tri.vertices[1], (p - tri.vertices[0]))).norm() * d2;
-
-            // --> values are too large
-            cout << "s: " << p_x << ", t: " << p_y << endl;
+            //cout << "s: " << s << ", t: " << t << endl;
 
             // get color from texture ...
-            // how to use tri.texCoords[] ?
-            QImage tex = tri.material.texture;
-            color.setRgb(tex.pixel(p_x, p_y));
+            color.setRgb(tex.pixel(s, t));
         }
         else
         {
