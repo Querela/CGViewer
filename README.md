@@ -4,6 +4,8 @@ CGViewer
 This project uses **Qt4** and **OpenGL**.  
 It is an university project for students.  
 
+Using **Octree** code from https://github.com/jnphilipp/Raytracer/ [git@github.com:jnphilipp/Raytracer.git].
+
 **All rights belong to their respective owners and the university of Leipzig!**
 
 -
