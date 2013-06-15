@@ -1,12 +1,19 @@
 TEMPLATE        = app
 TARGET          = CGViewer
 
-CONFIG          += qt warn_on debug
+#CONFIG          += qt warn_on debug
+CONFIG          += qt warn_on release
 QT              += opengl
 
 CONFIG          += console
 
-QMAKE_CXXFLAGS  += -fopenmp
+QMAKE_CXXFLAGS  += -fopenmp -march=native
+#QMAKE_CXXFLAGS  += -fopenmp -march=native -mfpmath=both
+
+# -Ofast ?
+#QMAKE_CXXFLAGS_RELEASE -= -O2
+#QMAKE_CXXFLAGS_RELEASE += -O3
+#QMAKE_LFLAGS_RELEASE -= -O1
 
 LIBS            += -lGLEW -lGLU -fopenmp
 
