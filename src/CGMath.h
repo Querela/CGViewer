@@ -9,6 +9,8 @@
 #include <cstring>
 #include <QImage>
 
+#define dot(v1, v2) scalarProduct(v1, v2)
+#define cross(v1, v2) crossProduct(v1, v2)
 
 class Vector
 {
@@ -59,6 +61,11 @@ class Vector
               return *this;
         }
 
+        bool operator == ( const Vector& v )
+        {
+            return (values[0] == v[0]) && (values[1] == v[1]) && (values[2] == v[2]);
+        }
+
         Vector operator + ( const Vector& v ) const
         {
             return Vector( values[0] + v[0], values[1] + v[1], values[2] + v[2] );
@@ -67,6 +74,11 @@ class Vector
         Vector operator - ( const Vector& v ) const
         {
             return Vector( values[0] - v[0], values[1] - v[1], values[2] - v[2] );
+        }
+
+        Vector operator - ( ) const
+        {
+            return Vector( -values[0], -values[1], -values[2] );
         }
 
         Vector operator * ( const float& scalar ) const
@@ -95,6 +107,13 @@ class Vector
             values[0] /= n;
             values[1] /= n;
             values[2] /= n;
+        }
+
+        void invert()
+        {
+             values[0] *= -1.0f;
+             values[1] *= -1.0f;
+             values[2] *= -1.0f;
         }
 
         float* getValues ()
@@ -162,7 +181,7 @@ struct Material
     std::string texName;
     QImage texture;
     
-    //normal map -- not important the raytracer
+    //normal map -- not important to the raytracer
     bool hasNormalMap;
     unsigned int normalMap_id;
     std::string normalMapName;
@@ -177,6 +196,82 @@ struct Triangle //just to have all the informations of Material and
     Vector normals[3];
     Vector texCoords[3]; //only [0] and [1] are used to store texInformations
     Vector planeNormal;
+
+    Vector ubeta;
+    Vector ugamma;
+    float kbeta;
+    float kgamma;
+
+    bool operator == ( const Triangle& t )
+    {
+        return (vertices[0] == t.vertices[0]) && (vertices[1] == t.vertices[1]) &&
+               (vertices[2] == t.vertices[2]) && (normals[0] == t.normals[0]) &&
+               (normals[1] == t.normals[1]) && (normals[2] == t.normals[2]) &&
+               (texCoords[0] == t.texCoords[0]) && (texCoords[1] == t.texCoords[1]) &&
+               (texCoords[2] == t.texCoords[2]) && (planeNormal == t.planeNormal) &&
+               (ubeta == t.ubeta) && (ugamma == t.ugamma) && (kbeta == t.kbeta) && (kgamma == t.kgamma);
+    }
+};
+
+/**
+ * Checks whether the triangle is intersected by
+ * the ray. Returns true if it is so and the
+ * parameter t of the ray function.
+ */
+inline bool cut(Vector *start, Vector *dir, Triangle *triangle, float *t)
+{
+    float d;
+    if ( (d = dot(*dir, (*triangle).planeNormal)) != 0  )
+    {
+        float t_temp = dot(((*triangle).vertices[0] - *start), (*triangle).planeNormal) / d;
+
+        if ( t_temp <= 0 )
+        {
+            return false;
+        }
+
+        Vector p_temp = *start + *dir * t_temp;
+        float beta = dot(p_temp, (*triangle).ubeta) + (*triangle).kbeta;
+
+        if ( beta < 0 )
+        {
+            return false;
+        }
+
+        float gamma = dot(p_temp, (*triangle).ugamma) + (*triangle).kgamma;
+
+        if ( gamma < 0 )
+        {
+            return false;
+        }
+
+        if ( (beta + gamma) > 1 )
+        {
+            return false;
+        }
+
+        *t = t_temp;
+        return true;
+    }
+
+    return false;
+};
+
+/**
+ * Checks whether the triangle is intersected by
+ * the ray. Returns true if it is so and the
+ * intersection point.
+ */
+inline bool cut(Vector *start, Vector *dir, Triangle *triangle, Vector *p)
+{
+    float t;
+    bool r;
+    if ( (r = cut(start, dir, triangle, &t)) )
+    {
+            *p = *start + *dir * t;
+    }
+
+    return r;
 };
 
 #endif

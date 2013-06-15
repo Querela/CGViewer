@@ -98,7 +98,10 @@ Raytracer::Raytracer( QString path )
                 mat.isTexture = true;
             }
             else
-                QMessageBox::warning(this, tr("Texture Loader"), tr("Texture couldn't be loaded!"),QMessageBox::Ok);            
+            {
+                //QMessageBox::warning(this, tr("Texture Loader"), tr("Texture couldn't be loaded!"),QMessageBox::Ok);
+                cout << "Texture (" << filepath.toStdString() << ") couldn't be loaded!" << endl;
+            }
         }
         if (isTexture == 2) //load normal map (heavy code duplicates TODO: change that)
         {
@@ -144,6 +147,7 @@ Raytracer::Raytracer( QString path )
         tex_coords.push_back(Vector(u,v,1.0));
     }
     //4.Fill faces /Triangles
+    float minx = FLT_MAX, miny = FLT_MAX, minz = FLT_MAX, maxx = FLT_MIN, maxy = FLT_MIN, maxz = FLT_MIN;
     for (int i=0;i<nFaces;++i)
     {
         int matNr,vertNr1,vertNr2,vertNr3,NormNr1,NormNr2,NormNr3,TexCoordsNr1,TexCoordsNr2,TexCoordsNr3;
@@ -157,6 +161,66 @@ Raytracer::Raytracer( QString path )
         t.normals[0]=normals[NormNr1];
         t.normals[1]=normals[NormNr2];
         t.normals[2]=normals[NormNr3];
+
+        // computing planeNormals
+        t.planeNormal = crossProduct(t.vertices[0] - t.vertices[1],
+                                     t.vertices[0] - t.vertices[2]);
+        t.planeNormal.normalize();
+
+        // acceleration with precomputation
+        Vector b = t.vertices[1]-t.vertices[0];
+        Vector c = t.vertices[2]-t.vertices[0];
+        // scalarProduct(v,v) == v.normSquare();
+        float d = (scalarProduct(c,c) * scalarProduct(b,b)) - (scalarProduct(c,b) * scalarProduct(b,c));
+
+        t.ubeta = (b * (scalarProduct(c, c) / d)) - (c * (scalarProduct(c, b) / d));
+        t.ugamma = (c * (scalarProduct(b, b) / d)) - (b * (scalarProduct(b, c) / d));
+        t.kbeta = scalarProduct(-t.vertices[0], t.ubeta);
+        t.kgamma = scalarProduct(-t.vertices[0], t.ugamma);
+
+        // get bounding box for octree
+        // vector 1
+        if ( minx > t.vertices[0][0] )
+            minx = t.vertices[0][0];
+        else if ( maxx < t.vertices[0][0] )
+            maxx = t.vertices[0][0];
+        if ( miny > t.vertices[0][1] )
+            miny = t.vertices[0][1];
+        else if ( maxy < t.vertices[0][1] )
+            maxy = t.vertices[0][1];
+        if ( minz > t.vertices[0][2] )
+            minz = t.vertices[0][2];
+        else if ( maxz < t.vertices[0][2] )
+            maxz = t.vertices[0][2];
+
+        // vector 2
+        if ( minx > t.vertices[1][0] )
+            minx = t.vertices[1][0];
+        else if ( maxx < t.vertices[1][0] )
+            maxx = t.vertices[1][0];
+        if ( miny > t.vertices[1][1] )
+            miny = t.vertices[1][1];
+        else if ( maxy < t.vertices[1][1] )
+            maxy = t.vertices[1][1];
+        if ( minz > t.vertices[1][2] )
+            minz = t.vertices[1][2];
+        else if ( maxz < t.vertices[1][2] )
+            maxz = t.vertices[1][2];
+
+        // vector 3
+        if ( minx > t.vertices[2][0] )
+            minx = t.vertices[2][0];
+        else if ( maxx < t.vertices[2][0] )
+            maxx = t.vertices[2][0];
+        if ( miny > t.vertices[2][1] )
+            miny = t.vertices[2][1];
+        else if ( maxy < t.vertices[2][1] )
+            maxy = t.vertices[2][1];
+        if ( minz > t.vertices[2][2] )
+            minz = t.vertices[2][2];
+        else if ( maxz < t.vertices[2][2] )
+            maxz = t.vertices[2][2];
+
         if (materials[matNr].isTexture)
         {
             t.texCoords[0]=tex_coords[TexCoordsNr1];
@@ -165,8 +229,24 @@ Raytracer::Raytracer( QString path )
         }
         triangles.push_back(t);
     }
-    cout<<"Got "<<triangles.size()<<" Triangles\n";
+    cout << "Got " << triangles.size() << " Triangles\n";
 
+    // building Octree
+    minx -= BOX_MARGIN;
+    maxx += BOX_MARGIN;
+    miny -= BOX_MARGIN;
+    maxy += BOX_MARGIN;
+    minz -= BOX_MARGIN;
+    maxz += BOX_MARGIN;
+
+    QTime t;
+    t.start();
+
+    octree = new Octree();
+    octree->build(&triangles, minx, miny, minz, maxx, maxy, maxz);
+
+    cout << "Building Octree (" << triangles.size() << " triangles -> "
+         << octree->size() << " voxels): " << t.elapsed()/1000.0f << " sec" << endl;
 }
 
 void Raytracer::init()
@@ -187,7 +267,7 @@ void Raytracer::init()
     //create DisplayList
     displayList = glGenLists(1);
     glNewList(displayList, GL_COMPILE);
-    for (int i=0; i<triangles.size(); ++i)
+    for (unsigned int i=0; i<triangles.size(); ++i)
     {
         float r = (float)(i % 255);
         float g = (float)((i/255) % 255);
@@ -274,6 +354,11 @@ void Raytracer::paintGL()
     glCallList(displayList);
 }
 
+void Raytracer::close()
+{
+    setVisible(false);
+}
+
 void Raytracer::genImage()
 {
     QTime t;
@@ -331,12 +416,14 @@ void Raytracer::genImage()
         #pragma omp critical
         {
             ++count;
-            cout<<"\r----"<<(float)count/(float)image->height()*100.0<<"----";
+            cout<<"\r----"<<(float)count/(float)image->height()*100.0f<<"----";
         }
-        
+
+        // get the thread number (0 == master thread)
+        const int threadID = omp_get_thread_num();
         #pragma omp critical
         {
-            if (!(superSamplingRate <= 1.0) || omp_get_num_threads()==1)
+            if ((!(superSamplingRate <= 1.0) || omp_get_num_threads()==1) && (threadID == 0))
             {
                 label->setPixmap(QPixmap::fromImage(image->scaled ( image->width()/superSamplingRate, image->height()/superSamplingRate, Qt::IgnoreAspectRatio, Qt::FastTransformation )));
                 label->repaint();
@@ -357,6 +444,62 @@ void Raytracer::genImage()
 
 QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 {
+    float dis = FLT_MAX;
+    Triangle triangle;
+    Vector p;
+    float t;
+
+    for ( int i = 0; i < octree->size(); i++ )
+    {
+        // cut each voxel
+        if ( octree->cutVoxel(i, &start, &dir, dis) )
+        {
+            Triangle tr;
+            Vector q;
+
+            // cut each triangle in voxel
+            float tmp = octree->cutTriangles(i, &start, &dir, NULL, &tr, &q);
+            if ( tmp < dis )
+            {
+                dis = tmp;
+                triangle = tr;
+                p = q;
+            }
+        }
+    }
+
+    if ( dis != FLT_MAX )
+    {
+        float r = 0.0f, g = 0.0f, b = 0.0f, a1 = 0.0f, a2 = 0.0f, a3=0.0f;
+
+        a2 = dot(p, triangle.ubeta) + triangle.kbeta;
+        a3 = dot(p, triangle.ugamma) + triangle.kgamma;
+        a1 = 1.0f - a2 - a3;
+
+        if (triangle.material.isTexture)
+        {
+            Vector tex = triangle.texCoords[0] * a1 +
+                         triangle.texCoords[1] * a2 +
+                         triangle.texCoords[2] * a3;
+            int x = std::abs((int)(tex[0] * (triangle.material.texture.width() - 1)))
+                        % triangle.material.texture.width();
+            int y = std::abs((int)((1 - tex[1]) * (triangle.material.texture.height() - 1)))
+                        % triangle.material.texture.height();
+
+            QColor tc = triangle.material.texture.pixel(x, y);
+
+            r = tc.red();
+            g = tc.green();
+            b = tc.blue();
+
+            return QColor(min((int) r % 256, 255),
+                          min((int) g % 256, 255),
+                          min((int) b % 256, 255)); 
+        }
+
+        return QColor(120, 250, 80);
+    }
+
     return backgroundColor;
 }
 

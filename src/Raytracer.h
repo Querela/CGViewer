@@ -6,10 +6,13 @@
 #include <GL/glext.h>
 #include <QGLWidget>
 #include <vector>
+#include <cfloat>
 
 #include "CGMath.h"
+#include "Octree.h"
 
 #define MAX_DEPTH 4
+#define BOX_MARGIN 0.1f
 
 class Raytracer : public QGLWidget
 {
@@ -28,27 +31,30 @@ class Raytracer : public QGLWidget
         private:
             void init();
             bool initShaders();
+            void close();
             QColor raytrace(Vector r, Vector e, int depth);
+
             QImage *image;
             QImage finalImage;
+
+            // scene data
             std::vector<Triangle> triangles;
+            std::vector<Lightsource> lights;
+            Octree *octree;
 
             //Scene setup
             Vector camera, center, upVector;
-            float focalLength;
             QColor backgroundColor, ambientLight;
-            
-            std::vector<Lightsource> lights;
 
+            float focalLength;
             float superSamplingRate;
 
-            //acceleration
+            //acceleration for background
             char** renderedImage;
             unsigned int *idx;
             GLuint displayList;
             GLuint screenTexID;
             GLuint fboId;
-            
 };
 
 #endif
