@@ -16,6 +16,12 @@
 
 // undefine/comment out if you want no textures
 #define TEXTURE_ON
+// undefine/comment out if you want no reflections (faster raytracing w/o)
+#define REFLECTION_ON
+// undefine/comment out if you want no refractions (faster raytracing w/o)
+#define REFRACTION_ON
+// undefine/comment out if you want no shadows
+#define SHADOWS_ON
 // uncomment if you want only the shadow part of the image
 //#define INVERT_SHADOWS
 

@@ -7,6 +7,39 @@ using namespace std;
 
 Raytracer::Raytracer( QString path )
 {
+// display dis/enabled constants used for rendering
+#ifndef TEXTURE_ON
+    cout << "- Textures disabled!" << endl;
+#else
+    cout << "- Using textures." << endl;
+#endif
+
+#ifndef REFLECTION_ON
+    cout << "- Reflection rays disabled! (faster rendering)" << endl;
+#else
+    cout << "- Reflection enabled." << endl;
+#endif
+
+#ifndef REFRACTION_ON
+    cout << "- Refraction rays disabled! (faster rendering)" << endl;
+#else
+    cout << "- Refraction enabled." << endl;
+#endif
+
+#ifndef SHADOWS_ON
+    cout << "- Shadows disabled!" << endl;
+#else
+    cout << "- Shadows enabled." << endl;
+#endif
+
+#ifdef INVERT_SHADOWS
+    cout << "- Showing only shadow part! (Debug?)" << endl;
+#endif
+
+    QString basepath = path;
+    basepath.chop(path.length() - path.lastIndexOf("/"));
+    cout << "Base path: " << basepath.toStdString() << endl;
+
     superSamplingRate = 1.1; //TODO: setting this to 1 and enabling on the fly output will cause a crash
     //read file and init everything
 
@@ -16,6 +49,10 @@ Raytracer::Raytracer( QString path )
     vector<Vector> tex_coords;
 
     int nLights = 0, nMat =0, nVert=0, nNorm=0, nTexCoords=0, nFaces=0;
+
+    // take loading time
+    QTime t;
+    t.start();
 
     //QString path("scene.tri");
     //create File
@@ -86,40 +123,43 @@ Raytracer::Raytracer( QString path )
         {
             string texName;
             file>>texName;
-            cout<<"Texture: "<<texName<<endl;
             QString filepath; //path in were the
-            filepath = path;
-            filepath.chop(path.length()-path.lastIndexOf("/"));
+            filepath = basepath;
             filepath.append(QString("/%1").arg(QString(texName.c_str())));
             QImage texture(filepath);
             if(!texture.isNull())
             {
+                cout << "Texture: " << texName << endl;
                 mat.texture = texture;
                 mat.isTexture = true;
             }
             else
             {
-                //QMessageBox::warning(this, tr("Texture Loader"), tr("Texture couldn't be loaded!"),QMessageBox::Ok);
-                cout << "Texture (" << filepath.toStdString() << ") couldn't be loaded!" << endl;
+                //QMessageBox::warning(this, tr("Texture Loader"),
+                //                     tr("Texture couldn't be loaded!"), QMessageBox::Ok);
+                cout << "Texture (" << texName << ") couldn't be loaded!" << endl;
             }
         }
         if (isTexture == 2) //load normal map (heavy code duplicates TODO: change that)
         {
             string bumpName;
             file>>bumpName;
-            cout<<"Normal Map: "<<bumpName<<endl;
-            QString filepath; //path in were the
-            filepath = path;
-            filepath.chop(path.length()-path.lastIndexOf("/"));
+            QString filepath;
+            filepath = basepath;
             filepath.append(QString("/%1").arg(QString(bumpName.c_str())));
             QImage bumpMap(filepath);
             if(!bumpMap.isNull())
             {
+                cout << "Normal Map: " << bumpName << endl;
                 mat.hasNormalMap = true;
                 mat.normalMap = bumpMap;
             }
             else
-                QMessageBox::warning(this, tr("Texture Loader"), tr("Normal map couldn't be loaded!"),QMessageBox::Ok);
+            {
+                //QMessageBox::warning(this, tr("Texture Loader"),
+                //                     tr("Normal map couldn't be loaded!"), QMessageBox::Ok);
+                cout << "Normal Map (" << bumpName << ") couldn't be loaded!" << endl;
+            }
         }
         materials.push_back(mat);
     }
@@ -229,7 +269,8 @@ Raytracer::Raytracer( QString path )
         }
         triangles.push_back(t);
     }
-    cout << "Got " << triangles.size() << " Triangles\n";
+    cout << "Loading data: " << t.restart()/1000.0f << " sec" << endl;
+    cout << "Got " << triangles.size() << " triangles" << endl;
 
     // building Octree
     minx -= BOX_MARGIN;
@@ -239,13 +280,10 @@ Raytracer::Raytracer( QString path )
     minz -= BOX_MARGIN;
     maxz += BOX_MARGIN;
 
-    QTime t;
-    t.start();
-
     octree = new Octree();
     octree->build(&triangles, minx, miny, minz, maxx, maxy, maxz);
 
-    cout << "Building Octree (" << triangles.size() << " triangles -> "
+    cout << "Building linear Octree (" << triangles.size() << " triangles ~~> "
          << octree->size() << " voxels): " << t.elapsed()/1000.0f << " sec" << endl;
 }
 
@@ -438,23 +476,21 @@ void Raytracer::genImage()
 
     label->setPixmap(QPixmap::fromImage(image->scaled ( image->width()/superSamplingRate, image->height()/superSamplingRate, Qt::IgnoreAspectRatio, Qt::SmoothTransformation )));
     label->repaint();
-    cout<<"Time: "<<t.elapsed()/1000.0<<endl;
+    cout << "Time rendering: " << t.elapsed()/1000.0f << endl;
 
     updateGL();
 }
 
 
-/*
-// for later use in recursive raytracing ... 
-// as entry point for method above
 QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 {
-    return raytrace(start, dir, depth);
-}
-*/
+    // abort if too much recursions
+    if (depth <= 0)
+    {
+        return backgroundColor;
+    }
+    depth --;
 
-QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
-{
     float dis = FLT_MAX;
     Triangle triangle;
     Vector p;
@@ -508,6 +544,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         float inv = scalarProduct(invDir, pn);
         if (inv < 0) pn = pn * (-1.f);
 
+
         Material mat = triangle.material;
         float r = 0.0f, g = 0.0f, b = 0.0f;
         //float r = 1.0f, g = 1.0f, b = 1.0f;
@@ -515,6 +552,7 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         r = ambientLight.redF()   * mat.ambient[0];
         g = ambientLight.greenF() * mat.ambient[1];
         b = ambientLight.blueF()  * mat.ambient[2];
+
 
         // --------------------------------------------------------------------
         // for all lightsources
@@ -536,52 +574,81 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
             // check visibility ?
             float pnl = scalarProduct(pn, l);
             // n * l < 90° --> pnl > 0 (cos)
-            if (pnl < 0)
-            {
-                continue;
-            }
-            else
-            {
-                // 0.0f .. 1.0f refraction factor
-                float alphaFactor = 1.f;
+            if (pnl < 0) continue;
 
-                // check shadows
-                // check for intersection with triangle before light source
-                bool shadow = false;
-                for (int j = 0; j < octree->size(); j ++)
+            // 0.0f .. 1.0f refraction factor
+            float alphaFactor = 1.f;
+
+#ifdef SHADOWS_ON
+            // check shadows
+            // check for intersection with triangle before light source
+            bool shadow = false;
+            for (int j = 0; j < octree->size(); j ++)
+            {
+                if (octree->cutVoxel(j, &p, &l, d))
                 {
-                    if (octree->cutVoxel(j, &p, &l, d))
-                    {
-                        shadow = octree->cutTriangles(j, &p, &l, &triangle, d, &alphaFactor);
-                        if (shadow) break;
-                    }
+                    shadow = octree->cutTriangles(j, &p, &l, &triangle, d, &alphaFactor);
+                    if (shadow) break;
                 }
-
-#ifdef INVERT_SHADOWS
-                shadow = ! shadow;
+            }
 #endif
 
-                // invert (! shadow) if you want only the shadow part ...
-                if (! shadow)
-                {
-                    float fatt = 1.f;
-                    if ((lig.constAtt != 0) && (lig.linAtt != 0) && (lig.quadAtt != 0))
-                    {
-                        fatt = 1.f / (lig.constAtt + d * lig.linAtt + d * d * lig.quadAtt);
-                    }
+//            if (mat.sharpness != 0.f)
+//            {
+//                QColor c_refl = raytrace(p, refl, depth);
+//
+//                r = mat.sharpness * r +  (1.f - mat.sharpness) * c_refl.redF();
+//                g = mat.sharpness * g +  (1.f - mat.sharpness) * c_refl.greenF();
+//                b = mat.sharpness * b +  (1.f - mat.sharpness) * c_refl.blueF();
+//            }
 
-                    // f_att(d) * (I_d * O_d * (n x l) + I_s * O_s * (max(0, (r x a)))^s
-                    float ridp = pow(std::max(0.f, scalarProduct(refl, invDir)), mat.shininess);
-                    r += fatt * (lig.diffuse[0] * mat.diffuse[0] * pnl +
-                                 lig.specular[0] * mat.specular[0] * ridp);// * alphaFactor;
-                    g += fatt * (lig.diffuse[1] * mat.diffuse[1] * pnl +
-                                 lig.specular[1] * mat.specular[1] * ridp);// * alphaFactor;
-                    b += fatt * (lig.diffuse[2] * mat.diffuse[2] * pnl +
-                                 lig.specular[2] * mat.specular[2] * ridp);// * alphaFactor;
+#ifdef INVERT_SHADOWS
+            // invert (! shadow) if you want only the shadow part ...
+            shadow = ! shadow;
+#endif
+
+#ifdef SHADOWS_ON
+            if (! shadow)
+            {
+#endif
+                float fatt = 1.f;
+                if ((lig.constAtt != 0) && (lig.linAtt != 0) && (lig.quadAtt != 0))
+                {
+                    fatt = 1.f / (lig.constAtt + d * lig.linAtt + d * d * lig.quadAtt);
                 }
+
+                // f_att(d) * (I_d * O_d * (n x l) + I_s * O_s * (max(0, (r x a)))^s
+                float ridp = pow(std::max(0.f, scalarProduct(refl, invDir)), mat.shininess);
+                r += fatt * (lig.diffuse[0] * mat.diffuse[0] * pnl +
+                             lig.specular[0] * mat.specular[0] * ridp);// * alphaFactor;
+                g += fatt * (lig.diffuse[1] * mat.diffuse[1] * pnl +
+                             lig.specular[1] * mat.specular[1] * ridp);// * alphaFactor;
+                b += fatt * (lig.diffuse[2] * mat.diffuse[2] * pnl +
+                             lig.specular[2] * mat.specular[2] * ridp);// * alphaFactor;
+#ifdef SHADOWS_ON
             }
+#endif
         }
 
+#ifdef REFLECTION_ON
+        // --------------------------------------------------------------------
+        // reflection ray (recursive)
+        if (mat.sharpness != 0.f)
+        {
+            Vector refl = (pn * scalarProduct(pn, invDir) * 2) - invDir;
+            QColor c_refl = raytrace(p, refl, depth);
+
+            r = (1.f - mat.sharpness) * r + mat.sharpness * c_refl.redF();
+            g = (1.f - mat.sharpness) * g + mat.sharpness * c_refl.greenF();
+            b = (1.f - mat.sharpness) * b + mat.sharpness * c_refl.blueF();
+        }
+#endif
+
+#ifdef REFRACTION_ON
+        // --------------------------------------------------------------------
+        // refraction ray (e. g. glass) (recursive)
+        
+#endif
 
 #ifdef TEXTURE_ON
         // --------------------------------------------------------------------
