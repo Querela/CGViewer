@@ -406,8 +406,10 @@ void Raytracer::genImage()
                 c = raytrace(camera, dir, MAX_DEPTH);
                                                 
             }
-              else
+            else
+            {
                 c = backgroundColor;
+            }
 
             image->setPixel(i,image->height()-(j+1), QRgb(c.rgb()));
 
@@ -442,24 +444,32 @@ void Raytracer::genImage()
 }
 
 
+/*
+// for later use in recursive raytracing ... 
+// as entry point for method above
+QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
+{
+    return raytrace(start, dir, depth);
+}
+*/
+
 QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 {
     float dis = FLT_MAX;
     Triangle triangle;
     Vector p;
-    float t;
 
-    for ( int i = 0; i < octree->size(); i++ )
+    for (int i = 0; i < octree->size(); i ++)
     {
         // cut each voxel
-        if ( octree->cutVoxel(i, &start, &dir, dis) )
+        if (octree->cutVoxel(i, &start, &dir, dis))
         {
             Triangle tr;
             Vector q;
 
             // cut each triangle in voxel
             float tmp = octree->cutTriangles(i, &start, &dir, NULL, &tr, &q);
-            if ( tmp < dis )
+            if (tmp < dis)
             {
                 dis = tmp;
                 triangle = tr;
@@ -468,41 +478,143 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         }
     }
 
-    if ( dis != FLT_MAX )
+    if (dis != FLT_MAX)
     {
-        float r = 0.0f, g = 0.0f, b = 0.0f, a1 = 0.0f, a2 = 0.0f, a3=0.0f;
+        float alpha[3];
 
-        a2 = dot(p, triangle.ubeta) + triangle.kbeta;
-        a3 = dot(p, triangle.ugamma) + triangle.kgamma;
-        a1 = 1.0f - a2 - a3;
+        // alpha values for interpolation
+        alpha[1] = dot(p, triangle.ubeta) + triangle.kbeta;
+        alpha[2] = dot(p, triangle.ugamma) + triangle.kgamma;
+        alpha[0] = 1.0f - alpha[1] - alpha[2];
 
+        // normal on intersection point
+        // n = alpha0 * n0 + alpha1 * n1 + alpha2 * n2
+        Vector pn = triangle.normals[0] * alpha[0] +
+                    triangle.normals[1] * alpha[1] +
+                    triangle.normals[2] * alpha[2];
+        pn.normalize(); // might be faster ??
+                        // you wouldn't think so but with normalization
+                        // it is slightly faster ...
+
+        // inverse view direction
+        // a = - b (== dir)
+        // or: invDir = (p - start) ?
+        Vector invDir = dir * (-1.f);
+        // should also always be normalized
+        invDir.normalize();
+
+        // really important !
+        // check if angle greater 90° -> invert normal vector at intersection
+        float inv = scalarProduct(invDir, pn);
+        if (inv < 0) pn = pn * (-1.f);
+
+        Material mat = triangle.material;
+        float r = 0.0f, g = 0.0f, b = 0.0f;
+        //float r = 1.0f, g = 1.0f, b = 1.0f;
+        // use 1.0f (and comment out next) if you want a scene with too much light ...
+        r = ambientLight.redF()   * mat.ambient[0];
+        g = ambientLight.greenF() * mat.ambient[1];
+        b = ambientLight.blueF()  * mat.ambient[2];
+
+        // --------------------------------------------------------------------
+        // for all lightsources
+        for (unsigned int i = 0; i < lights.size(); i ++)
+        {
+            Lightsource lig = lights[i];
+            // l - vector to lightsource
+            Vector l = lig.position - p;
+            // d - distance to lightsource
+            float d = l.norm();
+            // great effect if not normalized ...
+            l.normalize();
+            
+            // reflection ray
+            // r = 2 * (n x l) * n - l
+            Vector refl = (pn * scalarProduct(pn, l) * 2) - l;
+            //refl.normalize();
+
+            // check visibility ?
+            float pnl = scalarProduct(pn, l);
+            // n * l < 90° --> pnl > 0 (cos)
+            if (pnl < 0)
+            {
+                continue;
+            }
+            else
+            {
+                // 0.0f .. 1.0f refraction factor
+                float alphaFactor = 1.f;
+
+                // check shadows
+                // check for intersection with triangle before light source
+                bool shadow = false;
+                for (int j = 0; j < octree->size(); j ++)
+                {
+                    if (octree->cutVoxel(j, &p, &l, d))
+                    {
+                        shadow = octree->cutTriangles(j, &p, &l, &triangle, d, &alphaFactor);
+                        if (shadow) break;
+                    }
+                }
+
+#ifdef INVERT_SHADOWS
+                shadow = ! shadow;
+#endif
+
+                // invert (! shadow) if you want only the shadow part ...
+                if (! shadow)
+                {
+                    float fatt = 1.f;
+                    if ((lig.constAtt != 0) && (lig.linAtt != 0) && (lig.quadAtt != 0))
+                    {
+                        fatt = 1.f / (lig.constAtt + d * lig.linAtt + d * d * lig.quadAtt);
+                    }
+
+                    // f_att(d) * (I_d * O_d * (n x l) + I_s * O_s * (max(0, (r x a)))^s
+                    float ridp = pow(std::max(0.f, scalarProduct(refl, invDir)), mat.shininess);
+                    r += fatt * (lig.diffuse[0] * mat.diffuse[0] * pnl +
+                                 lig.specular[0] * mat.specular[0] * ridp);// * alphaFactor;
+                    g += fatt * (lig.diffuse[1] * mat.diffuse[1] * pnl +
+                                 lig.specular[1] * mat.specular[1] * ridp);// * alphaFactor;
+                    b += fatt * (lig.diffuse[2] * mat.diffuse[2] * pnl +
+                                 lig.specular[2] * mat.specular[2] * ridp);// * alphaFactor;
+                }
+            }
+        }
+
+
+#ifdef TEXTURE_ON
+        // --------------------------------------------------------------------
+        // if material of triangle is a texture get mapping
         if (triangle.material.isTexture)
         {
-            Vector tex = triangle.texCoords[0] * a1 +
-                         triangle.texCoords[1] * a2 +
-                         triangle.texCoords[2] * a3;
+            // get texture coordinate with interpolation
+            Vector tex = triangle.texCoords[0] * alpha[0] +
+                         triangle.texCoords[1] * alpha[1] +
+                         triangle.texCoords[2] * alpha[2];
             int x = std::abs((int)(tex[0] * (triangle.material.texture.width() - 1)))
                         % triangle.material.texture.width();
             int y = std::abs((int)((1 - tex[1]) * (triangle.material.texture.height() - 1)))
                         % triangle.material.texture.height();
 
+            // get color of point on texture
             QColor tc = triangle.material.texture.pixel(x, y);
 
-            r = tc.red();
-            g = tc.green();
-            b = tc.blue();
+            r *= tc.red()   / 255.f;
+            g *= tc.green() / 255.f;
+            b *= tc.blue()  / 255.f;
 
-            return QColor(min((int) r % 256, 255),
-                          min((int) g % 256, 255),
-                          min((int) b % 256, 255)); 
         }
+#endif
 
-        return QColor(120, 250, 80);
+        return QColor(min((int)(r * 255.f), 255),
+                      min((int)(g * 255.f), 255),
+                      min((int)(b * 255.f), 255)); 
     }
 
+    // default background
     return backgroundColor;
 }
-
 
 void Raytracer::keyPressEvent(QKeyEvent *event)
 {

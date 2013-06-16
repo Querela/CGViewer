@@ -14,6 +14,11 @@
 #define MAX_DEPTH 4
 #define BOX_MARGIN 0.1f
 
+// undefine/comment out if you want no textures
+#define TEXTURE_ON
+// uncomment if you want only the shadow part of the image
+//#define INVERT_SHADOWS
+
 class Raytracer : public QGLWidget
 {
     Q_OBJECT
