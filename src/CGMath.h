@@ -9,6 +9,8 @@
 #include <cstring>
 #include <QImage>
 
+#define EPSILON 0.0001f
+
 #define dot(v1, v2) scalarProduct(v1, v2)
 #define cross(v1, v2) crossProduct(v1, v2)
 
@@ -225,7 +227,7 @@ inline bool cut(Vector *start, Vector *dir, Triangle *triangle, float *t)
     {
         float t_temp = dot(((*triangle).vertices[0] - *start), (*triangle).planeNormal) / d;
 
-        if ( t_temp <= 0 )
+        if ( t_temp <= EPSILON )
         {
             return false;
         }

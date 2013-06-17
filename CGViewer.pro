@@ -7,7 +7,7 @@ QT              += opengl
 
 CONFIG          += console
 
-QMAKE_CXXFLAGS  += -fopenmp -march=native
+QMAKE_CXXFLAGS  += -fopenmp -march=native -flto -ffast-math -ggdb3
 #QMAKE_CXXFLAGS  += -fopenmp -march=native -mfpmath=both
 
 # -Ofast ?
