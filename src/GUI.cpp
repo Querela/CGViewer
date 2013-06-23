@@ -9,7 +9,7 @@ GUI::GUI()
 
     QMenu *file = new QMenu( QString("File"), this );
     menuBar()->addMenu( file );
-     file->addAction( "Import OBJ-File", this, SLOT(loadFile()), Qt::CTRL+Qt::Key_I );
+    file->addAction( "Import OBJ-File", this, SLOT(loadFile()), Qt::CTRL+Qt::Key_I );
     file->addAction( "Load Scene", this, SLOT(loadScene()), Qt::CTRL+Qt::Key_L );
     file->addAction( "Save Scene", this, SLOT(saveScene()), Qt::CTRL+Qt::Key_S );
 
@@ -20,8 +20,8 @@ GUI::GUI()
     options->addAction( "Translate Object", this, SLOT(translate()));
     options->addAction( "Rotate Object", this, SLOT(rotate()));
     options->addAction( "Delete Object", this, SLOT(deleteObject()));
-    //enableShaders = options->addAction( "Enable Shader", this, SLOT(setShaders()), Qt::CTRL+Qt::Key_M );
-    enableShaders = NULL; // = false;
+    enableShaders = options->addAction( "Enable Shader", this, SLOT(setShaders()), Qt::CTRL+Qt::Key_M );
+    //enableShaders = NULL; // = false;
      
     options->addAction( "Enable/Disable Backface Culling", this, SLOT(setCulling()), Qt::CTRL+Qt::Key_B );
 
@@ -42,16 +42,18 @@ GUI::GUI()
 void GUI::loadFile()
 {
     QString path;
-        path = QFileDialog::getOpenFileName(this,"Choose a file to open",QString::null,QString::null);
+    path = QFileDialog::getOpenFileName(this,"Choose a file to open",QString::null,QString::null);
     if (!path.isEmpty())
     {
         if (scene->readOBJFile(path))
             statusBar()->showMessage(tr("File Loaded"));
         else
             statusBar()->showMessage(tr("Error on Loading: Couldn't open OBJ-file!"));
-        }
+    }
     else
+    {
         statusBar()->showMessage(tr("Loading aborted"));
+    }
 }
 
 
