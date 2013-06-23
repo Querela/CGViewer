@@ -174,7 +174,7 @@ struct Material
     float diffuse[4];
     float specular[4];
     float shininess;
-    float alpha; //how light is going through an object
+    float alpha; //how light is going through an object (1.0 no transparency, 0.0 total transparency)
     float sharpness; //how is does the material reflect (1.0 -> perfect mirror, 0.0 -> no reflections)
     float density; //index of refraction i.e. how does the light bend when going through an object (1.0 means no bending)
     //diffuse (ambient) map

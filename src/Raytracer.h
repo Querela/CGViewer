@@ -44,6 +44,7 @@ class Raytracer : public QGLWidget
             bool initShaders();
             void close();
             QColor raytrace(Vector r, Vector e, int depth);
+            QColor raytrace(Vector start, Vector dir, int depth, float density);
 
             QImage *image;
             QImage finalImage;

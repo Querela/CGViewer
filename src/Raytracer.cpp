@@ -482,7 +482,13 @@ void Raytracer::genImage()
 }
 
 
+
 QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
+{
+    return raytrace(start, dir, depth, 1.0f);
+} 
+
+QColor Raytracer::raytrace(Vector start, Vector dir, int depth, float density)
 {
     // abort if too much recursions
     if (depth <= 0)
@@ -545,6 +551,8 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
         if (inv < 0) pn = pn * (-1.f);
 
 
+        // 1st compute color
+
         Material mat = triangle.material;
         float r = 0.0f, g = 0.0f, b = 0.0f;
         //float r = 1.0f, g = 1.0f, b = 1.0f;
@@ -593,15 +601,6 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
             }
 #endif
 
-//            if (mat.sharpness != 0.f)
-//            {
-//                QColor c_refl = raytrace(p, refl, depth);
-//
-//                r = mat.sharpness * r +  (1.f - mat.sharpness) * c_refl.redF();
-//                g = mat.sharpness * g +  (1.f - mat.sharpness) * c_refl.greenF();
-//                b = mat.sharpness * b +  (1.f - mat.sharpness) * c_refl.blueF();
-//            }
-
 #ifdef INVERT_SHADOWS
             // invert (! shadow) if you want only the shadow part ...
             shadow = ! shadow;
@@ -630,13 +629,15 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 #endif
         }
 
+        // 2nd compute (recursive) effects (reflection/refraction)
+
 #ifdef REFLECTION_ON
         // --------------------------------------------------------------------
         // reflection ray (recursive)
         if (mat.sharpness != 0.f)
         {
             Vector refl = (pn * scalarProduct(pn, invDir) * 2) - invDir;
-            QColor c_refl = raytrace(p, refl, depth);
+            QColor c_refl = raytrace(p, refl, depth, density);
 
             r = (1.f - mat.sharpness) * r + mat.sharpness * c_refl.redF();
             g = (1.f - mat.sharpness) * g + mat.sharpness * c_refl.greenF();
@@ -647,8 +648,36 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
 #ifdef REFRACTION_ON
         // --------------------------------------------------------------------
         // refraction ray (e. g. glass) (recursive)
-        
+        // TODO: check code - not sure if properly working ... :(
+        if (mat.alpha < 1.0f)
+        {
+            Vector refrac;
+            float c1 = scalarProduct(invDir, triangle.planeNormal);
+            float ns = density / mat.density;
+            float c2_nw = ns * ns * (1.f - c1 * c1);
+
+            if (c2_nw > 1.f)
+            {
+                refrac = dir - (triangle.planeNormal * c1 * 2.f);
+            }
+            else
+            {
+                //refrac = (dir * ns) + (triangle.planeNormal * (ns * (-c1) - sqrt(1.f - c2_nw)));
+                refrac = (dir * ns) - (triangle.planeNormal * (ns - sqrt(1.f - c2_nw)));
+                density = mat.density;
+            }
+            //refrac = (dir * ns) - (triangle.planeNormal * (ns - sqrt(1.f - c2_nw)));
+            //refrac = (dir * ns) + (triangle.planeNormal * (ns * (-c1) - sqrt(1.f - c2_nw)));
+
+            QColor c_refrac = raytrace(p, refrac, depth, density);
+
+            r = mat.alpha * c_refrac.redF()   + (1.f - mat.alpha) * r;
+            g = mat.alpha * c_refrac.greenF() + (1.f - mat.alpha) * g;
+            b = mat.alpha * c_refrac.blueF()  + (1.f - mat.alpha) * b;
+        }
 #endif
+
+        // 3rd texture
 
 #ifdef TEXTURE_ON
         // --------------------------------------------------------------------
@@ -667,16 +696,16 @@ QColor Raytracer::raytrace(Vector start, Vector dir, int depth)
             // get color of point on texture
             QColor tc = triangle.material.texture.pixel(x, y);
 
-            r *= tc.red()   / 255.f;
-            g *= tc.green() / 255.f;
-            b *= tc.blue()  / 255.f;
+            r *= tc.redF();
+            g *= tc.greenF();
+            b *= tc.blueF();
 
         }
 #endif
 
-        return QColor(min((int)(r * 255.f), 255),
-                      min((int)(g * 255.f), 255),
-                      min((int)(b * 255.f), 255)); 
+        return QColor(max(min((int)(r * 255.f), 255), 0),
+                      max(min((int)(g * 255.f), 255), 0),
+                      max(min((int)(b * 255.f), 255), 0)); 
     }
 
     // default background
