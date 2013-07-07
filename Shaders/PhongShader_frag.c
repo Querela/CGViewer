@@ -1,5 +1,5 @@
 uniform int numLights;
-uniform sampler2D Texture0;
+//uniform sampler2D Texture0;
 uniform sampler2D basemap;
 
 varying vec3 normal;
@@ -24,25 +24,24 @@ void main( )
 
         vec3 reflected = normalize ( reflect ( -vertexToLight, normal ) );
 
-        vec4 ambient  = gl_LightSource[l].ambient * gl_FrontMaterial.ambient;
+        //vec4 ambient  = gl_LightSource[l].ambient * gl_FrontMaterial.ambient;
+        if ( dot ( vertex, vertexToLight ) < 0.0 ) return;
         vec4 diffuse  = gl_LightSource[l].diffuse * gl_FrontMaterial.diffuse * 
                             max ( dot (normal, vertexToLight ), 0.0 );
         vec4 specular = gl_LightSource[l].specular * gl_FrontMaterial.specular *
                             pow ( max ( dot ( reflected, invDir ), 0.0 ), gl_FrontMaterial.shininess );
 
-        float fatt = 1.0;
-        if ( gl_LightSource[l].constantAttenuation != 0.0 &&
-             gl_LightSource[l].linearAttenuation != 0.0 &&
-             gl_LightSource[l].quadraticAttenuation != 0.0 )
-        {
-            fatt = 1.0 / ( gl_LightSource[l].constantAttenuation +
-                           gl_LightSource[l].linearAttenuation * distanceToLight +
-                           gl_LightSource[l].quadraticAttenuation * distanceToLight * distanceToLight );
-        }
+        float fatt = gl_LightSource[l].constantAttenuation  +
+                     gl_LightSource[l].linearAttenuation    * distanceToLight +
+                     gl_LightSource[l].quadraticAttenuation * distanceToLight * distanceToLight;
+        if ( fatt != 0.0 )
+            fatt = 1.0 / fatt;
+        else
+            fatt = 1.0;
 
         //color += ambient + diffuse + specular;
         color += fatt * ( diffuse + specular );
 //    }
 
-    gl_FragColor = color * texture2D ( Texture0, vec2 ( gl_TexCoord[0] ) );
+    gl_FragColor = color * texture2D ( basemap, vec2 ( gl_TexCoord[0] ) );
 }
