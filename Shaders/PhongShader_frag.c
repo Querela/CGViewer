@@ -1,4 +1,6 @@
 uniform int numLights;
+uniform sampler2D Texture0;
+
 varying vec3 normal;
 varying vec3 vertex;
 
@@ -16,5 +18,5 @@ void main( )
         color.b += dot ( normal, vertexToLight );
     }
 */
-    gl_FragColor = gl_Color;
+    gl_FragColor = texture2D ( Texture0, vec2 ( gl_TexCoord[0] ) );
 }
