@@ -30,16 +30,17 @@ void main( )
     vec3 tangent = normalize ( Q1 * st2.t - Q2 * st1.t );
     vec3 bitangent = normalize ( -Q1 * st2.s + Q2 * st1.s );
 
-    //tangent = normalize ( cross ( tangent, N ) );
-    //bitangent = normalize ( cross ( bitangent, N ) );
+    // smoothing to avoid edges
+    tangent = normalize ( cross ( tangent, N ) );
+    bitangent = normalize ( cross ( bitangent, N ) );
 
     // the transpose of texture-to-eye space matrix
     //mat3 TBN = transpose ( mat3 ( tangent, bitangent, normal ) );
     mat3 TBN = mat3 ( tangent, bitangent, normal );
 
     N = N * TBN; // TBN * N if transpose ?
-    N = normalize ( N );
-    //N = normalize ( normal + N );
+    //N = normalize ( N );
+    N = normalize ( normal + N );
 //*/
 
     int l = 0;
@@ -49,28 +50,27 @@ void main( )
         vec3 vertexToLight = normalize ( lightPosition - vertex );
         float distanceToLight = length ( lightPosition - vertex );
 
+        // too much lightning ?
         //vec4 ambient  = gl_LightSource[l].ambient * gl_FrontMaterial.ambient;
+
         // different sign if texture ?
-        if ( dot ( N, vertexToLight ) > 0.0 )
-        {
-            vec3 reflected = reflect ( -vertexToLight, N );
+        vec3 reflected = reflect ( -vertexToLight, N );
 
-            vec4 diffuse  = gl_LightSource[l].diffuse * gl_FrontMaterial.diffuse * 
-                                max ( dot ( N, vertexToLight ), 0.0 );
-            vec4 specular = gl_LightSource[l].specular * gl_FrontMaterial.specular *
-                                pow ( max ( dot ( reflected, invDir ), 0.0 ), gl_FrontMaterial.shininess );
+        vec4 diffuse  = gl_LightSource[l].diffuse * gl_FrontMaterial.diffuse * 
+                            max ( dot ( N, vertexToLight ), 0.0 );
+        vec4 specular = gl_LightSource[l].specular * gl_FrontMaterial.specular *
+                            pow ( max ( dot ( reflected, invDir ), 0.0 ), gl_FrontMaterial.shininess );
 
-            float fatt = gl_LightSource[l].constantAttenuation  +
-                         gl_LightSource[l].linearAttenuation    * distanceToLight +
-                         gl_LightSource[l].quadraticAttenuation * distanceToLight * distanceToLight;
-            if ( fatt != 0.0 )
-                fatt = 1.0 / fatt;
-            else
-                fatt = 1.0;
+        float fatt = gl_LightSource[l].constantAttenuation  +
+                     gl_LightSource[l].linearAttenuation    * distanceToLight +
+                     gl_LightSource[l].quadraticAttenuation * distanceToLight * distanceToLight;
+        if ( fatt != 0.0 )
+            fatt = 1.0 / fatt;
+        else
+            fatt = 1.0;
 
-            //color += ambient + diffuse + specular;
-            color += fatt * ( diffuse + specular );
-        }
+        //color += ambient + diffuse + specular;
+        color += fatt * ( diffuse + specular );
 //    }
 
     gl_FragColor = color * texture2D ( basemap, gl_TexCoord[0].st );
