@@ -19,8 +19,8 @@ void main( )
     //color += gl_LightModel.ambient;
 
     vec3 N = normal;
-/*
-    vec3 N = vec3 ( texture2D ( normalmap, gl_TexCoord[0].st ) );
+//*
+    N = vec3 ( texture2D ( normalmap, gl_TexCoord[0].st ) );
 
     // heuristic to compute tangent and bitangent for normal map
     vec3 Q1 = dFdx ( vertex );
@@ -38,8 +38,8 @@ void main( )
     mat3 TBN = mat3 ( tangent, bitangent, normal );
 
     N = N * TBN; // TBN * N if transpose ?
-    N = normalize ( normal + N );
-*/
+    //N = normalize ( normal + N );
+//*/
 
     int l = 0;
 //    for ( int l = 0 ; l < numLights ; ++ l )
