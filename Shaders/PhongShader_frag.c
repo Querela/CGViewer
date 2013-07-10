@@ -38,6 +38,7 @@ void main( )
     mat3 TBN = mat3 ( tangent, bitangent, normal );
 
     N = N * TBN; // TBN * N if transpose ?
+    N = normalize ( N );
     //N = normalize ( normal + N );
 //*/
 
